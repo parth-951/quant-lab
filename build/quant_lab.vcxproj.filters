@@ -10,6 +10,9 @@
     <ClCompile Include="C:\Users\Parth\OneDrive\Desktop\quant lab\src\gbm.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\Users\Parth\OneDrive\Desktop\quant lab\src\monte_carlo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="C:\Users\Parth\OneDrive\Desktop\quant lab\CMakeLists.txt" />
