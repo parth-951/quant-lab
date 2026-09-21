@@ -368,6 +368,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="C:\Users\Parth\OneDrive\Desktop\quant lab\src\random.cpp" />
     <ClCompile Include="C:\Users\Parth\OneDrive\Desktop\quant lab\src\gbm.cpp" />
     <ClCompile Include="C:\Users\Parth\OneDrive\Desktop\quant lab\src\monte_carlo.cpp" />
+    <ClCompile Include="C:\Users\Parth\OneDrive\Desktop\quant lab\src\black_scholes.cpp" />
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>
