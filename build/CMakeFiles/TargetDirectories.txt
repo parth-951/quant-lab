@@ -1,0 +1,3 @@
+C:/Users/Parth/OneDrive/Desktop/quant lab/build/CMakeFiles/quant_lab.dir
+C:/Users/Parth/OneDrive/Desktop/quant lab/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/Parth/OneDrive/Desktop/quant lab/build/CMakeFiles/ZERO_CHECK.dir
