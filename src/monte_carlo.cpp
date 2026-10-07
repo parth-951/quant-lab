@@ -2,6 +2,7 @@
 #include "validation.hpp"
 
 #include <cmath>
+#include <random>
 #include <stdexcept>
 
 namespace ql {
@@ -10,6 +11,10 @@ MonteCarlo::MonteCarlo(unsigned int seed)
     : rng_(seed)
 {
 }
+
+// ============================================================
+// STANDARD MONTE CARLO
+// ============================================================
 
 MCResult MonteCarlo::price(
     const Option& option,
@@ -56,7 +61,8 @@ MCResult MonteCarlo::price(
                 + sigma * sqrtT * Z
             );
 
-        const double payoff = option.payoff(ST);
+        const double payoff =
+            option.payoff(ST);
 
         const double discountedPayoff =
             discount * payoff;
@@ -78,7 +84,8 @@ MCResult MonteCarlo::price(
 
     const double stdError =
         std::sqrt(
-            variance / static_cast<double>(simulations)
+            variance /
+            static_cast<double>(simulations)
         );
 
     const double lower95 =
@@ -95,6 +102,9 @@ MCResult MonteCarlo::price(
     };
 }
 
+// ============================================================
+// ANTITHETIC MONTE CARLO
+// ============================================================
 
 MCResult MonteCarlo::priceAntithetic(
     const Option& option,
@@ -135,14 +145,20 @@ MCResult MonteCarlo::priceAntithetic(
 
         const double Z = rng_.normal();
 
+        // --------------------------------------------------------
         // First path: +Z
+        // --------------------------------------------------------
+
         const double ST1 =
             S * std::exp(
                 (r - 0.5 * sigma * sigma) * T
                 + sigma * sqrtT * Z
             );
 
+        // --------------------------------------------------------
         // Antithetic path: -Z
+        // --------------------------------------------------------
+
         const double ST2 =
             S * std::exp(
                 (r - 0.5 * sigma * sigma) * T
@@ -178,7 +194,8 @@ MCResult MonteCarlo::priceAntithetic(
 
     const double stdError =
         std::sqrt(
-            variance / static_cast<double>(simulations)
+            variance /
+            static_cast<double>(simulations)
         );
 
     const double lower95 =

@@ -13,6 +13,7 @@ public:
     const std::vector<Position>& positions() const;
 
     double marketValue() const;
+    double pnl() const;
 
 private:
     std::vector<Position> positions_;

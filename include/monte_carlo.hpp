@@ -3,7 +3,7 @@
 #include "market.hpp"
 #include "option.hpp"
 #include "random.hpp"
-
+#include <random>
 namespace ql {
 
 struct MCResult {
@@ -15,7 +15,9 @@ struct MCResult {
 
 class MonteCarlo {
 public:
-    explicit MonteCarlo(unsigned int seed = 0);
+    explicit MonteCarlo(
+        unsigned int seed = std::random_device{}()
+    );
 
     MCResult price(
         const Option& option,

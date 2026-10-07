@@ -5,12 +5,15 @@
 #include "monte_carlo.hpp"
 #include "option.hpp"
 #include "validation.hpp"
+#include "returns.hpp"
+
 
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -113,8 +116,50 @@ int main()
         OptionType::Put,
         ExerciseStyle::American
     };
+// ============================================================
+// HISTORICAL RETURNS
+// ============================================================
 
+{
+    const std::vector<double> prices{
+        100.0,
+        105.0,
+        102.0,
+        106.0
+    };
 
+    const auto returns = historicalReturns(prices);
+
+    expectTrue(
+        "Historical returns size",
+        returns.size() == 3
+    );
+
+    const double expected1 = 0.05;
+    const double expected2 = (102.0 - 105.0) / 105.0;
+    const double expected3 = (106.0 - 102.0) / 102.0;
+
+    expectNear(
+        "Historical return 1",
+        returns[0],
+        expected1,
+        1e-12
+    );
+
+    expectNear(
+        "Historical return 2",
+        returns[1],
+        expected2,
+        1e-12
+    );
+
+    expectNear(
+        "Historical return 3",
+        returns[2],
+        expected3,
+        1e-12
+    );
+}
     // ============================================================
     // ENGINES
     // ============================================================
@@ -348,31 +393,68 @@ int main()
     // ============================================================
 
     const MCResult callMC =
+    monteCarlo.price(
+        genericCall,
+        market,
+        100000
+    );
+
+const MCResult putMC =
+    monteCarlo.price(
+        genericPut,
+        market,
+        100000
+    );
+
+expectTrue(
+    "MC call confidence interval contains BS price",
+    callMC.lower95 <= bsCall &&
+    bsCall <= callMC.upper95
+);
+
+expectTrue(
+    "MC put confidence interval contains BS price",
+    putMC.lower95 <= bsPut &&
+    bsPut <= callMC.upper95
+);
+
+
+// ============================================================
+// MONTE CARLO — SIMULATION VALIDATION
+// ============================================================
+
+expectThrows(
+    "Monte Carlo rejects one simulation",
+    [&]() {
         monteCarlo.price(
             genericCall,
             market,
-            100000
+            1
         );
+    }
+);
 
-    const MCResult putMC =
+expectThrows(
+    "Monte Carlo rejects zero simulations",
+    [&]() {
         monteCarlo.price(
-            genericPut,
+            genericCall,
             market,
-            100000
+            0
         );
+    }
+);
 
-    expectTrue(
-        "MC call confidence interval contains BS price",
-        callMC.lower95 <= bsCall &&
-        bsCall <= callMC.upper95
-    );
-
-    expectTrue(
-        "MC put confidence interval contains BS price",
-        putMC.lower95 <= bsPut &&
-        bsPut <= putMC.upper95
-    );
-
+expectThrows(
+    "Monte Carlo rejects negative simulations",
+    [&]() {
+        monteCarlo.price(
+            genericCall,
+            market,
+            -1
+        );
+    }
+);
 
     // ============================================================
     // ANTITHETIC MONTE CARLO
@@ -543,6 +625,70 @@ expectThrows(
             );
         }
     );
+    // Less than two prices
+try {
+
+    historicalReturns({100.0});
+
+    std::cerr
+        << "FAILED: Historical returns reject "
+           "insufficient prices\n";
+
+    return 1;
+
+} catch (const std::invalid_argument&) {
+}
+
+// Zero price
+try {
+
+    historicalReturns({
+        100.0,
+        0.0
+    });
+
+    std::cerr
+        << "FAILED: Historical returns reject "
+           "zero price\n";
+
+    return 1;
+
+} catch (const std::invalid_argument&) {
+}
+
+// Negative price
+try {
+
+    historicalReturns({
+        100.0,
+        -5.0
+    });
+
+    std::cerr
+        << "FAILED: Historical returns reject "
+           "negative price\n";
+
+    return 1;
+
+} catch (const std::invalid_argument&) {
+}
+
+// NaN price
+try {
+
+    historicalReturns({
+        100.0,
+        std::nan("")
+    });
+
+    std::cerr
+        << "FAILED: Historical returns reject "
+           "NaN price\n";
+
+    return 1;
+
+} catch (const std::invalid_argument&) {
+}
     // ============================================================
     // RESULTS
     // ============================================================

@@ -15,9 +15,10 @@ double ImpliedVolatility::solve(
     double marketPrice,
     double initialGuess
 ) const {
-    // --------------------------------------------------------
-    // Basic validation
-    // --------------------------------------------------------
+
+    // ============================================================
+    // BASIC VALIDATION
+    // ============================================================
 
     validateMarket(
         market.spot,
@@ -37,21 +38,25 @@ double ImpliedVolatility::solve(
         );
     }
 
-    if (!std::isfinite(marketPrice) || marketPrice <= 0.0) {
+    if (!std::isfinite(marketPrice) ||
+        marketPrice <= 0.0) {
+
         throw std::invalid_argument(
             "Market option price must be greater than zero."
         );
     }
 
-    if (!std::isfinite(initialGuess) || initialGuess <= 0.0) {
+    if (!std::isfinite(initialGuess) ||
+        initialGuess <= 0.0) {
+
         throw std::invalid_argument(
             "Initial volatility guess must be greater than zero."
         );
     }
 
-    // --------------------------------------------------------
-    // No-arbitrage price bounds
-    // --------------------------------------------------------
+    // ============================================================
+    // NO-ARBITRAGE PRICE BOUNDS
+    // ============================================================
 
     const double S = market.spot;
     const double K = option.strike;
@@ -65,25 +70,36 @@ double ImpliedVolatility::solve(
     double upperBound;
 
     if (option.type == OptionType::Call) {
+
         // max(S - K*e^(-rT), 0) <= C <= S
+
         lowerBound =
-            std::max(S - discountedStrike, 0.0);
+            std::max(
+                S - discountedStrike,
+                0.0
+            );
 
         upperBound = S;
-    }
-    else {
+
+    } else {
+
         // max(K*e^(-rT) - S, 0) <= P <= K*e^(-rT)
+
         lowerBound =
-            std::max(discountedStrike - S, 0.0);
+            std::max(
+                discountedStrike - S,
+                0.0
+            );
 
         upperBound = discountedStrike;
     }
 
-    // Small tolerance for floating-point rounding.
-    const double boundTolerance = 1e-12;
+    constexpr double BOUND_TOLERANCE = 1e-12;
 
-    if (marketPrice < lowerBound - boundTolerance ||
-        marketPrice > upperBound + boundTolerance) {
+    if (marketPrice <
+            lowerBound - BOUND_TOLERANCE ||
+        marketPrice >
+            upperBound + BOUND_TOLERANCE) {
 
         throw std::invalid_argument(
             "Market option price is outside "
@@ -91,92 +107,251 @@ double ImpliedVolatility::solve(
         );
     }
 
-    // --------------------------------------------------------
-    // Newton-Raphson setup
-    // --------------------------------------------------------
+    // ============================================================
+    // OBJECTS
+    // ============================================================
 
     BlackScholes blackScholes;
     Greeks greeks;
 
-    double sigma = initialGuess;
+    // ============================================================
+    // SOLVER PARAMETERS
+    // ============================================================
 
-    constexpr int MAX_ITERATIONS = 100;
-    constexpr double VEGA_EPSILON = 1e-12;
+    constexpr int NEWTON_MAX_ITERATIONS = 50;
+    constexpr int BISECTION_MAX_ITERATIONS = 100;
+
     constexpr double PRICE_TOLERANCE = 1e-8;
+    constexpr double VOLATILITY_TOLERANCE = 1e-10;
 
-    // --------------------------------------------------------
-    // Newton-Raphson
-    // --------------------------------------------------------
+    constexpr double VEGA_EPSILON = 1e-12;
+
+    constexpr double MIN_VOLATILITY = 1e-8;
+    constexpr double INITIAL_UPPER_VOLATILITY = 1.0;
+    constexpr double MAX_VOLATILITY = 10.0;
+
+    // ============================================================
+    // BUILD A VOLATILITY BRACKET
+    // ============================================================
+
+    double lowVolatility = MIN_VOLATILITY;
+    double highVolatility = INITIAL_UPPER_VOLATILITY;
+
+    market.volatility = lowVolatility;
+
+    const double lowPrice =
+        blackScholes.price(
+            option,
+            market
+        );
+
+    market.volatility = highVolatility;
+
+    double highPrice =
+        blackScholes.price(
+            option,
+            market
+        );
+
+    // Increase the upper volatility until the market
+    // price is bracketed.
+
+    while (highPrice < marketPrice &&
+           highVolatility < MAX_VOLATILITY) {
+
+        highVolatility *= 2.0;
+
+        if (highVolatility > MAX_VOLATILITY) {
+            highVolatility = MAX_VOLATILITY;
+        }
+
+        market.volatility = highVolatility;
+
+        highPrice =
+            blackScholes.price(
+                option,
+                market
+            );
+    }
+
+    // ============================================================
+    // CHECK WHETHER A FINITE IMPLIED VOLATILITY EXISTS
+    // ============================================================
+
+    if (marketPrice < lowPrice - PRICE_TOLERANCE ||
+        marketPrice > highPrice + PRICE_TOLERANCE) {
+
+        throw std::runtime_error(
+            "Unable to bracket implied volatility."
+        );
+    }
+
+    // ============================================================
+    // NEWTON-RAPHSON
+    // ============================================================
+
+    double sigma =
+        std::clamp(
+            initialGuess,
+            lowVolatility,
+            highVolatility
+        );
 
     for (int iteration = 0;
-         iteration < MAX_ITERATIONS;
+         iteration < NEWTON_MAX_ITERATIONS;
          ++iteration) {
 
-        // Make sure the current volatility is valid.
-        if (!std::isfinite(sigma) || sigma <= 0.0) {
-            throw std::runtime_error(
-                "Implied volatility iteration produced "
-                "an invalid volatility."
-            );
+        if (!std::isfinite(sigma) ||
+            sigma <= 0.0) {
+
+            break;
         }
 
         market.volatility = sigma;
 
         const double modelPrice =
-            blackScholes.price(option, market);
+            blackScholes.price(
+                option,
+                market
+            );
 
         const double priceError =
             modelPrice - marketPrice;
 
-        // Converged.
-        if (std::abs(priceError) < PRICE_TOLERANCE) {
+        // --------------------------------------------------------
+        // Converged
+        // --------------------------------------------------------
+
+        if (std::abs(priceError) <
+            PRICE_TOLERANCE) {
+
             return sigma;
         }
 
-        // ----------------------------------------------------
-        // Vega check
-        // ----------------------------------------------------
+        // --------------------------------------------------------
+        // Maintain the volatility bracket
+        // --------------------------------------------------------
+
+        if (priceError > 0.0) {
+            highVolatility = sigma;
+        } else {
+            lowVolatility = sigma;
+        }
+
+        // --------------------------------------------------------
+        // Check bracket width
+        // --------------------------------------------------------
+
+        if ((highVolatility - lowVolatility) <
+            VOLATILITY_TOLERANCE) {
+
+            return 0.5 *
+                   (lowVolatility + highVolatility);
+        }
+
+        // --------------------------------------------------------
+        // Vega
+        // --------------------------------------------------------
 
         const double vega =
-            greeks.vega(option, market);
+            greeks.vega(
+                option,
+                market
+            );
 
         if (!std::isfinite(vega) ||
             std::abs(vega) < VEGA_EPSILON) {
 
-            throw std::runtime_error(
-                "Implied volatility failed: "
-                "Vega is too small for a stable Newton update."
-            );
+            break;
         }
 
-        // ----------------------------------------------------
+        // --------------------------------------------------------
         // Newton update
-        // ----------------------------------------------------
+        // --------------------------------------------------------
 
         const double nextSigma =
-            sigma - priceError / vega;
+            sigma -
+            priceError / vega;
 
-        // Never allow Newton-Raphson to continue with
-        // zero or negative volatility.
+        // If Newton wants to leave the valid bracket,
+        // stop Newton and use bisection.
+
         if (!std::isfinite(nextSigma) ||
-            nextSigma <= 0.0) {
+            nextSigma <= lowVolatility ||
+            nextSigma >= highVolatility) {
 
-            throw std::runtime_error(
-                "Implied volatility Newton update "
-                "produced a non-positive volatility."
-            );
+            break;
         }
 
         sigma = nextSigma;
     }
 
-    // --------------------------------------------------------
-    // Maximum iteration limit reached
-    // --------------------------------------------------------
+    // ============================================================
+    // BISECTION FALLBACK
+    // ============================================================
+
+    for (int iteration = 0;
+         iteration < BISECTION_MAX_ITERATIONS;
+         ++iteration) {
+
+        const double midVolatility =
+            0.5 *
+            (lowVolatility + highVolatility);
+
+        market.volatility = midVolatility;
+
+        const double modelPrice =
+            blackScholes.price(
+                option,
+                market
+            );
+
+        const double priceError =
+            modelPrice - marketPrice;
+
+        // --------------------------------------------------------
+        // Converged by price
+        // --------------------------------------------------------
+
+        if (std::abs(priceError) <
+            PRICE_TOLERANCE) {
+
+            return midVolatility;
+        }
+
+        // --------------------------------------------------------
+        // Converged by volatility interval
+        // --------------------------------------------------------
+
+        if ((highVolatility - lowVolatility) <
+            VOLATILITY_TOLERANCE) {
+
+            return midVolatility;
+        }
+
+        // --------------------------------------------------------
+        // Update bracket
+        // --------------------------------------------------------
+
+        if (priceError > 0.0) {
+
+            highVolatility =
+                midVolatility;
+
+        } else {
+
+            lowVolatility =
+                midVolatility;
+        }
+    }
+
+    // ============================================================
+    // FAILURE
+    // ============================================================
 
     throw std::runtime_error(
         "Implied volatility failed to converge "
-        "within the maximum number of iterations."
+        "using Newton-Raphson and bisection."
     );
 }
 

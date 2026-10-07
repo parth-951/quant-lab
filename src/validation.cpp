@@ -1,45 +1,88 @@
 #include "validation.hpp"
 
+#include <cmath>
 #include <stdexcept>
 #include <string>
-
 namespace ql {
 
-void validateMarket(double spot,
-                   double rate,
-                   double volatility) {
+namespace {
 
-    if (spot <= 0.0) {
+void validateFinite(
+    double value,
+    const char* name
+) {
+    if (!std::isfinite(value)) {
         throw std::invalid_argument(
-            "Spot price must be greater than zero."
-        );
-    }
-
-    if (volatility <= 0.0) {
-        throw std::invalid_argument(
-            "Volatility must be greater than zero."
-        );
-    }
-
-    if (rate <= -1.0) {
-        throw std::invalid_argument(
-            "Interest rate must be greater than -100%."
+            std::string(name) + " must be finite"
         );
     }
 }
 
-void validateOption(double strike,
-                    double maturity) {
+} // anonymous namespace
 
-    if (strike <= 0.0) {
+void validateMarket(
+    double spot,
+    double rate,
+    double volatility
+) {
+    // ------------------------------------------------------------
+    // Spot
+    // ------------------------------------------------------------
+
+    validateFinite(spot, "Spot price");
+
+    if (spot <= 0.0) {
         throw std::invalid_argument(
-            "Strike price must be greater than zero."
+            "Spot price must be positive"
         );
     }
 
+    // ------------------------------------------------------------
+    // Risk-free rate
+    //
+    // Negative rates are allowed.
+    // ------------------------------------------------------------
+
+    validateFinite(rate, "Risk-free rate");
+
+    // ------------------------------------------------------------
+    // Volatility
+    // ------------------------------------------------------------
+
+    validateFinite(volatility, "Volatility");
+
+    if (volatility <= 0.0) {
+        throw std::invalid_argument(
+            "Volatility must be positive"
+        );
+    }
+}
+
+void validateOption(
+    double strike,
+    double maturity
+) {
+    // ------------------------------------------------------------
+    // Strike
+    // ------------------------------------------------------------
+
+    validateFinite(strike, "Strike price");
+
+    if (strike <= 0.0) {
+        throw std::invalid_argument(
+            "Strike price must be positive"
+        );
+    }
+
+    // ------------------------------------------------------------
+    // Maturity
+    // ------------------------------------------------------------
+
+    validateFinite(maturity, "Maturity");
+
     if (maturity <= 0.0) {
         throw std::invalid_argument(
-            "Maturity must be greater than zero."
+            "Maturity must be positive"
         );
     }
 }
@@ -48,16 +91,15 @@ void validateSteps(int steps) {
 
     if (steps <= 0) {
         throw std::invalid_argument(
-            "Number of binomial steps must be greater than zero."
+            "Number of steps must be positive"
         );
     }
 }
 
 void validateSimulations(int simulations) {
-
-    if (simulations <2) {
+    if (simulations < 2) {
         throw std::invalid_argument(
-            "Number of simulations must be atleast two."
+            "Number of simulations must be at least 2"
         );
     }
 }

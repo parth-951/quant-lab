@@ -1,4 +1,5 @@
 #include "greeks.hpp"
+#include "validation.hpp"
 
 #include <cmath>
 #include <stdexcept>
@@ -25,43 +26,22 @@ double Greeks::delta(
     const Market& market
 ) const {
 
-    // --------------------------------------------------------
-    // Validation
-    // --------------------------------------------------------
+    validateMarket(
+        market.spot,
+        market.rate,
+        market.volatility
+    );
 
-    if (market.spot <= 0.0) {
-        throw std::invalid_argument(
-            "Spot price must be positive"
-        );
-    }
-
-    if (option.strike <= 0.0) {
-        throw std::invalid_argument(
-            "Strike price must be positive"
-        );
-    }
-
-    if (option.maturity <= 0.0) {
-        throw std::invalid_argument(
-            "Maturity must be positive"
-        );
-    }
-
-    if (market.volatility <= 0.0) {
-        throw std::invalid_argument(
-            "Volatility must be positive"
-        );
-    }
+    validateOption(
+        option.strike,
+        option.maturity
+    );
 
     if (option.exercise != ExerciseStyle::European) {
         throw std::invalid_argument(
             "Black-Scholes Greeks support European options only"
         );
     }
-
-    // --------------------------------------------------------
-    // Parameters
-    // --------------------------------------------------------
 
     const double S = market.spot;
     const double K = option.strike;
@@ -75,10 +55,6 @@ double Greeks::delta(
         (std::log(S / K) +
          (r + 0.5 * sigma * sigma) * T)
         / (sigma * sqrtT);
-
-    // --------------------------------------------------------
-    // Delta
-    // --------------------------------------------------------
 
     if (option.type == OptionType::Call) {
         return normalCDF(d1);
@@ -96,43 +72,22 @@ double Greeks::gamma(
     const Market& market
 ) const {
 
-    // --------------------------------------------------------
-    // Validation
-    // --------------------------------------------------------
+    validateMarket(
+        market.spot,
+        market.rate,
+        market.volatility
+    );
 
-    if (market.spot <= 0.0) {
-        throw std::invalid_argument(
-            "Spot price must be positive"
-        );
-    }
-
-    if (option.strike <= 0.0) {
-        throw std::invalid_argument(
-            "Strike price must be positive"
-        );
-    }
-
-    if (option.maturity <= 0.0) {
-        throw std::invalid_argument(
-            "Maturity must be positive"
-        );
-    }
-
-    if (market.volatility <= 0.0) {
-        throw std::invalid_argument(
-            "Volatility must be positive"
-        );
-    }
+    validateOption(
+        option.strike,
+        option.maturity
+    );
 
     if (option.exercise != ExerciseStyle::European) {
         throw std::invalid_argument(
             "Black-Scholes Greeks support European options only"
         );
     }
-
-    // --------------------------------------------------------
-    // Parameters
-    // --------------------------------------------------------
 
     const double S = market.spot;
     const double K = option.strike;
@@ -146,10 +101,6 @@ double Greeks::gamma(
         (std::log(S / K) +
          (r + 0.5 * sigma * sigma) * T)
         / (sigma * sqrtT);
-
-    // --------------------------------------------------------
-    // Gamma
-    // --------------------------------------------------------
 
     return normalPDF(d1) /
            (S * sigma * sqrtT);
@@ -164,43 +115,22 @@ double Greeks::vega(
     const Market& market
 ) const {
 
-    // --------------------------------------------------------
-    // Validation
-    // --------------------------------------------------------
+    validateMarket(
+        market.spot,
+        market.rate,
+        market.volatility
+    );
 
-    if (market.spot <= 0.0) {
-        throw std::invalid_argument(
-            "Spot price must be positive"
-        );
-    }
-
-    if (option.strike <= 0.0) {
-        throw std::invalid_argument(
-            "Strike price must be positive"
-        );
-    }
-
-    if (option.maturity <= 0.0) {
-        throw std::invalid_argument(
-            "Maturity must be positive"
-        );
-    }
-
-    if (market.volatility <= 0.0) {
-        throw std::invalid_argument(
-            "Volatility must be positive"
-        );
-    }
+    validateOption(
+        option.strike,
+        option.maturity
+    );
 
     if (option.exercise != ExerciseStyle::European) {
         throw std::invalid_argument(
             "Black-Scholes Greeks support European options only"
         );
     }
-
-    // --------------------------------------------------------
-    // Parameters
-    // --------------------------------------------------------
 
     const double S = market.spot;
     const double K = option.strike;
@@ -214,10 +144,6 @@ double Greeks::vega(
         (std::log(S / K) +
          (r + 0.5 * sigma * sigma) * T)
         / (sigma * sqrtT);
-
-    // --------------------------------------------------------
-    // Vega
-    // --------------------------------------------------------
 
     return S * normalPDF(d1) * sqrtT;
 }

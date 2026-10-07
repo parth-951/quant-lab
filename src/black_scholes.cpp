@@ -1,4 +1,5 @@
 #include "black_scholes.hpp"
+#include "validation.hpp"
 
 #include <cmath>
 #include <stdexcept>
@@ -22,34 +23,24 @@ double BlackScholes::price(
 ) const {
 
     // ------------------------------------------------------------
-    // Input validation
+    // Centralized validation
     // ------------------------------------------------------------
 
-    if (market.spot <= 0.0) {
-        throw std::invalid_argument(
-            "Spot price must be positive"
-        );
-    }
+    validateMarket(
+        market.spot,
+        market.rate,
+        market.volatility
+    );
 
-    if (option.strike <= 0.0) {
-        throw std::invalid_argument(
-            "Strike price must be positive"
-        );
-    }
+    validateOption(
+        option.strike,
+        option.maturity
+    );
 
-    if (option.maturity <= 0.0) {
-        throw std::invalid_argument(
-            "Maturity must be positive"
-        );
-    }
+    // ------------------------------------------------------------
+    // Exercise style
+    // ------------------------------------------------------------
 
-    if (market.volatility <= 0.0) {
-        throw std::invalid_argument(
-            "Volatility must be positive"
-        );
-    }
-
-    // Black-Scholes only supports European options
     if (option.exercise != ExerciseStyle::European) {
         throw std::invalid_argument(
             "Black-Scholes supports European options only"
@@ -69,7 +60,7 @@ double BlackScholes::price(
     const double sqrtT = std::sqrt(T);
 
     // ------------------------------------------------------------
-    // Black-Scholes parameters
+    // d1 / d2
     // ------------------------------------------------------------
 
     const double d1 =
@@ -81,17 +72,15 @@ double BlackScholes::price(
         d1 - sigma * sqrtT;
 
     // ------------------------------------------------------------
-    // Option pricing
+    // Pricing
     // ------------------------------------------------------------
 
     if (option.type == OptionType::Call) {
 
         return S * normalCDF(d1)
              - K * std::exp(-r * T) * normalCDF(d2);
-
     }
 
-    // European Put
     return K * std::exp(-r * T) * normalCDF(-d2)
          - S * normalCDF(-d1);
 }
