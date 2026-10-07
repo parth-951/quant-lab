@@ -1,0 +1,18 @@
+@"
+build/
+build-gcc/
+.vscode/
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.lib
+*.sln
+*.vcxproj
+*.vcxproj.filters
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+"@ | Out-File -Encoding utf8 .gitignore
