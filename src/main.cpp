@@ -5,42 +5,35 @@
 #include "implied_vol.hpp"
 #include "monte_carlo.hpp"
 #include "option.hpp"
-
+#include "portfolio.hpp"
+#include "portfolio_exposure.hpp"
+#include "portfolio_historical_risk.hpp"
+#include "risk_attribution.hpp"
+#include <algorithm>
+#include <cmath>
 #include <iomanip>
 #include <iostream>
-
+#include <string>
+#include <vector>
 int main() {
-
     using namespace ql;
-
     // ============================================================
     // MARKET
     // ============================================================
-
     const Market market{
-        100.0,   // Spot
-        0.05,    // Risk-free rate
-        0.20     // Volatility
+        100.0,
+        0.05,
+        0.20
     };
-
-
     // ============================================================
-    // OLD OPTION TYPES
-    // Kept while we migrate the pricing engines
+    // OPTIONS
     // ============================================================
-
-
-    // ============================================================
-    // NEW GENERIC OPTIONS
-    // ============================================================
-
     const Option genericCall{
         100.0,
         1.0,
         OptionType::Call,
         ExerciseStyle::European
     };
-
     const Option genericPut{
         100.0,
         1.0,
@@ -53,303 +46,485 @@ int main() {
         OptionType::Call,
         ExerciseStyle::American
     };
-
     const Option genericAmericanPut{
         100.0,
         1.0,
         OptionType::Put,
         ExerciseStyle::American
     };
-
-
     // ============================================================
     // ENGINES
     // ============================================================
-
     const BlackScholes blackScholes;
     const BinomialTree binomial;
     const Greeks greeks;
     const ImpliedVolatility impliedVolatility;
-     MonteCarlo monteCarlo;
-
+    MonteCarlo monteCarlo;
     GBM gbm(42);
-
-
     // ============================================================
     // BLACK-SCHOLES
     // ============================================================
-
     const double blackScholesCall =
-        blackScholes.price(genericCall, market);
-
+        blackScholes.price(
+            genericCall,
+            market
+        );
     const double blackScholesPut =
-        blackScholes.price(genericPut, market);
-
-
-// ============================================================
-// BINOMIAL
-// ============================================================
-
-const double binomialEuropeanCall =
-    binomial.price(
-        genericCall,
-        market,
-        500
-    );
-
-const double binomialEuropeanPut =
-    binomial.price(
-        genericPut,
-        market,
-        500
-    );
-
-const double binomialAmericanCall =
-    binomial.price(
-        genericAmericanCall,
-        market,
-        500
-    );
-
-const double binomialAmericanPut =
-    binomial.price(
-        genericAmericanPut,
-        market,
-        500
-    );
-
-
+        blackScholes.price(
+            genericPut,
+            market
+        );
     // ============================================================
-    // NEW GENERIC MONTE CARLO API
+    // BINOMIAL TREE
     // ============================================================
-
-    const MCResult genericCallMC =
+    const double europeanCall =
+        binomial.price(
+            genericCall,
+            market,
+            500
+        );
+    const double europeanPut =
+        binomial.price(
+            genericPut,
+            market,
+            500
+        );
+    const double americanCall =
+        binomial.price(
+            genericAmericanCall,
+            market,
+            500
+        );
+    const double americanPut =
+        binomial.price(
+            genericAmericanPut,
+            market,
+            500
+        );
+    // ============================================================
+    // MONTE CARLO
+    // ============================================================
+    const MCResult monteCarloCall =
         monteCarlo.price(
             genericCall,
             market,
             100000
         );
-
-    const MCResult genericPutMC =
+    const MCResult monteCarloPut =
         monteCarlo.price(
             genericPut,
             market,
             100000
         );
-
-
+    // ============================================================
+    // GREEKS
+    // ============================================================
+    const double delta =
+        greeks.delta(
+            genericCall,
+            market
+        );
+    const double gamma =
+        greeks.gamma(
+            genericCall,
+            market
+        );
+    const double vega =
+        greeks.vega(
+            genericCall,
+            market
+        );
+    // ============================================================
+    // IMPLIED VOLATILITY
+    // ============================================================
+    const double impliedVol =
+        impliedVolatility.solve(
+            genericCall,
+            market,
+            blackScholesCall
+        );
     // ============================================================
     // GBM
     // ============================================================
-
     const auto path =
         gbm.simulate(
             market,
             genericCall.maturity,
             252
         );
-
-
+    // ============================================================
+    // PORTFOLIO
+    // ============================================================
+    Portfolio portfolio;
+    portfolio.addPosition(
+        Position{
+            10.0,
+            95.0,
+            100.0,
+            "A"
+        }
+    );
+    portfolio.addPosition(
+        Position{
+            5.0,
+            190.0,
+            200.0,
+            "B"
+        }
+    );
+    portfolio.addPosition(
+        Position{
+            -3.0,
+            110.0,
+            105.0,
+            "HEDGE"
+        }
+    );
+    // ============================================================
+    // PORTFOLIO EXPOSURE
+    // ============================================================
+    const PortfolioExposure exposureEngine;
+    const PortfolioExposureResult exposure =
+        exposureEngine.calculate(
+            portfolio
+        );
+    // ============================================================
+    // HISTORICAL PRICE DATA
+    // ============================================================
+    const std::vector<HistoricalPriceSeries> histories{
+        {
+            "A",
+            {
+                "2026-01-02",
+                "2026-01-03",
+                "2026-01-04",
+                "2026-01-05"
+            },
+            {
+                100.0,
+                95.0,
+                90.0,
+                105.0
+            }
+        },
+        {
+            "B",
+            {
+                "2026-01-02",
+                "2026-01-03",
+                "2026-01-04",
+                "2026-01-05"
+            },
+            {
+                200.0,
+                190.0,
+                180.0,
+                210.0
+            }
+        },
+        {
+            "HEDGE",
+            {
+                "2026-01-02",
+                "2026-01-03",
+                "2026-01-04",
+                "2026-01-05"
+            },
+            {
+                105.0,
+                110.0,
+                115.0,
+                100.0
+            }
+        }
+    };
+    // ============================================================
+    // HISTORICAL PORTFOLIO RISK
+    // ============================================================
+    const PortfolioHistoricalRisk historicalRiskEngine;
+    const PortfolioHistoricalRiskResult historicalRisk =
+        historicalRiskEngine.calculate(
+            portfolio,
+            histories,
+            0.75
+        );
+    // ============================================================
+    // RISK ATTRIBUTION
+    // ============================================================
+    const RiskAttribution attributionEngine;
+    const RiskAttributionResult attribution =
+        attributionEngine.calculate(
+            historicalRisk,
+            0.75
+        );
     // ============================================================
     // OUTPUT
     // ============================================================
-
     std::cout
         << std::fixed
         << std::setprecision(6);
-
-
     std::cout
         << "========================================\n"
-        << "             QUANT LAB\n"
+        << "              QUANT LAB\n"
         << "========================================\n\n";
-
-
-    // ------------------------------------------------------------
-    // Black-Scholes
-    // ------------------------------------------------------------
-
+    // ============================================================
+    // BLACK-SCHOLES
+    // ============================================================
     std::cout
         << "===== BLACK-SCHOLES =====\n";
-
     std::cout
-        << "European Call : "
+        << "Call Price : "
         << blackScholesCall
         << '\n';
-
     std::cout
-        << "European Put  : "
+        << "Put Price  : "
         << blackScholesPut
         << "\n\n";
-
-
-    // ------------------------------------------------------------
-    // Binomial
-    // ------------------------------------------------------------
-
+    // ============================================================
+    // BINOMIAL TREE
+    // ============================================================
     std::cout
         << "===== BINOMIAL TREE =====\n";
-
     std::cout
         << "European Call : "
-        << binomialEuropeanCall
+        << europeanCall
         << '\n';
-
     std::cout
         << "European Put  : "
-        << binomialEuropeanPut
+        << europeanPut
         << '\n';
-
     std::cout
         << "American Call : "
-        << binomialAmericanCall
+        << americanCall
         << '\n';
-
     std::cout
         << "American Put  : "
-        << binomialAmericanPut
+        << americanPut
         << '\n';
 
     std::cout
-        << "Early Exercise Premium : "
-        << binomialAmericanPut - binomialEuropeanPut
+        << "Early Exercise Premium (Put) : "
+        << americanPut - europeanPut
         << "\n\n";
-
-
-    // ------------------------------------------------------------
-    // NEW GENERIC MONTE CARLO
-    // ------------------------------------------------------------
-
+    // ============================================================
+    // MONTE CARLO
+    // ============================================================
     std::cout
-        << "===== GENERIC MONTE CARLO =====\n";
-
+        << "===== MONTE CARLO =====\n";
     std::cout
-        << "Generic Call : "
-        << genericCallMC.price
+        << "Call Price : "
+        << monteCarloCall.price
         << '\n';
-
     std::cout
         << "Call 95% CI : ["
-        << genericCallMC.lower95
+        << monteCarloCall.lower95
         << ", "
-        << genericCallMC.upper95
+        << monteCarloCall.upper95
         << "]\n";
-
     std::cout
-        << "Generic Put  : "
-        << genericPutMC.price
+        << "Put Price : "
+        << monteCarloPut.price
         << '\n';
-
     std::cout
-        << "Put 95% CI  : ["
-        << genericPutMC.lower95
+        << "Put 95% CI : ["
+        << monteCarloPut.lower95
         << ", "
-        << genericPutMC.upper95
+        << monteCarloPut.upper95
         << "]\n\n";
-
-
-    // ------------------------------------------------------------
-// Greeks
-// ------------------------------------------------------------
-
-std::cout
-    << "===== GREEKS =====\n";
-
-std::cout
-    << "Delta : "
-    << greeks.delta(
-        genericCall,
-        market
-    )
-    << '\n';
-
-std::cout
-    << "Gamma : "
-    << greeks.gamma(
-        genericCall,
-        market
-    )
-    << '\n';
-
-std::cout
-    << "Vega  : "
-    << greeks.vega(
-        genericCall,
-        market
-    )
-    << "\n\n";
-    // ------------------------------------------------------------
-    // Implied Volatility
-    // ------------------------------------------------------------
-
+    // ============================================================
+    // GREEKS
+    // ============================================================
+    std::cout
+        << "===== GREEKS =====\n";
+    std::cout
+        << "Delta : "
+        << delta
+        << '\n';
+    std::cout
+        << "Gamma : "
+        << gamma
+        << '\n';
+    std::cout
+        << "Vega  : "
+        << vega
+        << "\n\n";
+    // ============================================================
+    // IMPLIED VOLATILITY
+    // ============================================================
     std::cout
         << "===== IMPLIED VOLATILITY =====\n";
-
     std::cout
-        << "Recovered Volatility : "
-        << impliedVolatility.solve(
-            genericCall,
-            market,
-            blackScholesCall
-        ) * 100.0
+        << "Implied Volatility : "
+        << impliedVol * 100.0
         << "%\n\n";
-
-
-    // ------------------------------------------------------------
-    // Validation / comparison
-    // ------------------------------------------------------------
-
+    // ============================================================
+    // PRICING COMPARISON
+    // ============================================================
     std::cout
         << "===== PRICING COMPARISON =====\n";
-
     std::cout
-        << "BS Call vs Tree Error : "
+        << "BS vs European Tree : "
         << std::abs(
             blackScholesCall -
-            binomialEuropeanCall
+            europeanCall
         )
         << '\n';
-
     std::cout
-        << "BS Call vs Generic MC Error : "
+        << "BS vs Monte Carlo   : "
         << std::abs(
             blackScholesCall -
-            genericCallMC.price
+            monteCarloCall.price
         )
         << '\n';
-
     std::cout
-        << "BS Put vs Tree Error : "
+        << "Put BS vs Tree      : "
         << std::abs(
             blackScholesPut -
-            binomialEuropeanPut
+            europeanPut
         )
         << '\n';
-
     std::cout
-        << "BS Put vs Generic MC Error : "
+        << "Put BS vs MC        : "
         << std::abs(
             blackScholesPut -
-            genericPutMC.price
+            monteCarloPut.price
         )
         << "\n\n";
-
-
-    // ------------------------------------------------------------
+    // ============================================================
     // GBM
-    // ------------------------------------------------------------
-
+    // ============================================================
     std::cout
         << "===== GBM =====\n";
-
     std::cout
-        << "Seeded GBM Terminal Price : "
+        << "First 10 simulated prices:\n";
+    for (
+        std::size_t i = 0;
+        i < std::min<std::size_t>(10, path.size());
+        ++i
+    ) {
+        std::cout
+            << path[i]
+            << '\n';
+    }
+    std::cout
+        << "Terminal Price : "
         << path.back()
-        << '\n';
-
-
+        << "\n\n";
+    // ============================================================
+    // PORTFOLIO EXPOSURE TABLE
+    // ============================================================
     std::cout
-        << "\n========================================\n";
-
+        << "===== PORTFOLIO EXPOSURE =====\n";
+    std::cout
+        << std::left
+        << std::setw(18)
+        << "Instrument"
+        << std::right
+        << std::setw(18)
+        << "Market Value"
+        << std::setw(18)
+        << "Gross Weight"
+        << '\n';
+    std::cout
+        << std::string(54, '-')
+        << '\n';
+    for (const auto& instrument : exposure.instruments) {
+        std::cout
+            << std::left
+            << std::setw(18)
+            << instrument.instrumentId
+            << std::right
+            << std::setw(18)
+            << instrument.marketValue
+            << std::setw(17)
+            << instrument.grossWeight * 100.0
+            << "%\n";
+    }
+    std::cout
+        << std::string(54, '-')
+        << '\n';
+    std::cout
+        << std::left
+        << std::setw(18)
+        << "Net Exposure"
+        << std::right
+        << std::setw(18)
+        << exposure.netExposure
+        << '\n';
+    std::cout
+        << std::left
+        << std::setw(18)
+        << "Gross Exposure"
+        << std::right
+        << std::setw(18)
+        << exposure.grossExposure
+        << "\n\n";
+    // ============================================================
+    // HISTORICAL RISK
+    // ============================================================
+    std::cout
+        << "===== HISTORICAL PORTFOLIO RISK =====\n";
+    std::cout
+        << "Current Market Value : "
+        << historicalRisk.currentMarketValue
+        << '\n';
+    std::cout
+        << "Current P&L          : "
+        << historicalRisk.currentPnl
+        << '\n';
+    std::cout
+        << "Historical VaR       : "
+        << historicalRisk.var
+        << '\n';
+    std::cout
+        << "Expected Shortfall   : "
+        << historicalRisk.expectedShortfall
+        << "\n\n";
+    // ============================================================
+    // COMPONENT ES TABLE
+    // ============================================================
+    std::cout
+        << "===== COMPONENT ES =====\n";
+    std::cout
+        << std::left
+        << std::setw(18)
+        << "Instrument"
+        << std::right
+        << std::setw(18)
+        << "Component ES"
+        << std::setw(20)
+        << "Contribution %"
+        << '\n';
+    std::cout
+        << std::string(56, '-')
+        << '\n';
+    for (
+        const auto& [instrumentId, componentES]
+        : attribution.componentES
+    ) {
+        std::cout
+            << std::left
+            << std::setw(18)
+            << instrumentId
+            << std::right
+            << std::setw(18)
+            << componentES
+            << std::setw(19)
+            << attribution.contributionPercent.at(instrumentId)
+            << "%\n";
+    }
+    std::cout
+        << std::string(56, '-')
+        << '\n';
+    std::cout
+        << std::left
+        << std::setw(18)
+        << "Total ES"
+        << std::right
+        << std::setw(18)
+        << attribution.totalES
+        << "\n\n";
+    std::cout
+        << "========================================\n";
     return 0;
 }

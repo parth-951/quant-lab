@@ -1,14 +1,12 @@
 #include "risk_attribution.hpp"
-
 #include <cmath>
 #include <iostream>
 #include <string>
 #include <vector>
 #include <exception>
+#include <stdexcept>
 #include <cstdlib>
-
 namespace {
-
 void expectNear(
     const std::string& name,
     double actual,
@@ -23,7 +21,6 @@ void expectNear(
         std::exit(1);
     }
 }
-
 void expectTrue(
     const std::string& name,
     bool condition
@@ -33,9 +30,7 @@ void expectTrue(
         std::exit(1);
     }
 }
-
 } // namespace
-
 int main() {
     try{
     // ============================================================
@@ -85,33 +80,27 @@ int main() {
             100.0,
             100.0
         };
-
         ql::RiskAttribution attribution;
-
         const auto result =
             attribution.calculate(riskResult, 0.80);
-
         expectNear(
             "Basic A component ES",
             result.componentES.at("A"),
             70.0,
             1e-12
         );
-
         expectNear(
             "Basic B component ES",
             result.componentES.at("B"),
             30.0,
             1e-12
         );
-
         expectNear(
             "Basic total ES",
             result.totalES,
             100.0,
             1e-12
         );
-
         expectNear(
             "Basic components sum to total ES",
             result.componentES.at("A") +
@@ -120,7 +109,6 @@ int main() {
             1e-12
         );
     }
-
     // ============================================================
     // Test 2: Fractional tail
     //
@@ -179,12 +167,9 @@ std::cout << "Running Test 2\n";
             96.0,
             96.0
         };
-
         ql::RiskAttribution attribution;
-
         const auto result =
             attribution.calculate(riskResult, 0.75);
-
         // Tail size = 1.25
         //
         // A tail loss:
@@ -201,21 +186,18 @@ std::cout << "Running Test 2\n";
         //
         // Total:
         //   58 + 38 = 96
-
         expectNear(
             "Fractional A component ES",
             result.componentES.at("A"),
             58.0,
             1e-12
         );
-
         expectNear(
             "Fractional B component ES",
             result.componentES.at("B"),
             38.0,
             1e-12
         );
-
         expectNear(
             "Fractional components sum",
             result.componentES.at("A") +
@@ -224,7 +206,6 @@ std::cout << "Running Test 2\n";
             1e-12
         );
     }
-
     // ============================================================
     // Test 3: Hedging instrument
     //
@@ -273,26 +254,21 @@ std::cout << "Running Test 3\n";
             100.0,
             100.0
         };
-
         ql::RiskAttribution attribution;
-
         const auto result =
             attribution.calculate(riskResult, 0.80);
-
         expectNear(
             "Hedging instrument A component ES",
             result.componentES.at("A"),
             130.0,
             1e-12
         );
-
         expectNear(
             "Hedging instrument negative component ES",
             result.componentES.at("HEDGE"),
             -30.0,
             1e-12
         );
-
         expectNear(
             "Hedging components sum to portfolio ES",
             result.componentES.at("A") +
@@ -300,7 +276,6 @@ std::cout << "Running Test 3\n";
             100.0,
             1e-12
         );
-
         expectTrue(
             "Hedging component should remain negative",
             result.componentES.at("HEDGE") < 0.0
@@ -342,19 +317,15 @@ std::cout << "Running Test 4\n";
             100.0,
             100.0
         };
-
         ql::RiskAttribution attribution;
-
         const auto result =
             attribution.calculate(riskResult, 0.80);
-
         expectNear(
             "A contribution percentage",
             result.contributionPercent.at("A"),
             70.0,
             1e-12
         );
-
         expectNear(
             "B contribution percentage",
             result.contributionPercent.at("B"),
@@ -393,20 +364,14 @@ std::cout << "Running Test 5\n";
             100.0,
             100.0
         };
-
         ql::RiskAttribution attribution;
-
         const auto result =
             attribution.calculate(riskResult, 0.80);
-
         double totalContribution = 0.0;
-
         for (const auto& [instrumentId, contribution] :
             result.contributionPercent) {
-
             totalContribution += contribution;
         }
-
         expectNear(
             "Risk contributions sum to 100 percent",
             totalContribution,
@@ -454,26 +419,21 @@ std::cout << "Running Test 6\n";
             100.0,
             100.0
         };
-
         ql::RiskAttribution attribution;
-
         const auto result =
             attribution.calculate(riskResult, 0.80);
-
         expectNear(
             "A hedge test contribution",
             result.contributionPercent.at("A"),
             130.0,
             1e-12
         );
-
         expectNear(
             "HEDGE contribution",
             result.contributionPercent.at("HEDGE"),
             -30.0,
             1e-12
         );
-
         expectNear(
             "Hedge contributions sum to 100 percent",
             result.contributionPercent.at("A") +
@@ -481,7 +441,6 @@ std::cout << "Running Test 6\n";
             100.0,
             1e-12
         );
-
         expectTrue(
             "HEDGE contribution should be negative",
             result.contributionPercent.at("HEDGE") < 0.0
@@ -497,15 +456,10 @@ std::cout << "Running Test 6\n";
     //     -100, -50, 20
     //
     // At 75% confidence:
-    //     tailSize = 1.25
+    //     tailSize = (1 - 0.75) * 3 = 0.75
     //
-    // Portfolio ES:
-    //     (100 + 0.25 * 50) / 1.25 = 90
-    //
-    // Therefore:
-    //
-    //     A component ES = 90
-    //     Portfolio ES   = 90
+    // Only the worst scenario contributes, so the single-position
+    // component ES and portfolio ES are both 100.
     // ============================================================
 std::cout << "Running Test 7\n";
     {
@@ -531,26 +485,21 @@ std::cout << "Running Test 7\n";
             100.0,
             100.0
         };
-
         ql::RiskAttribution attribution;
-
         const auto result =
             attribution.calculate(riskResult, 0.75);
-
         expectNear(
             "Single position component ES equals portfolio ES",
             result.componentES.at("A"),
             result.totalES,
             1e-12
         );
-
         expectNear(
             "Single position component ES",
             result.componentES.at("A"),
             100.0,
             1e-12
         );
-
         expectNear(
             "Single position contribution percentage",
             result.contributionPercent.at("A"),
@@ -574,19 +523,11 @@ std::cout << "Running Test 7\n";
     //
     // At 75% confidence:
     //
-    // Portfolio ES:
-    //     (150 + 0.25 * 90) / 1.25
-    //     = 138
+    //     tailSize = (1 - 0.75) * 3 = 0.75
     //
-    // A ES:
-    //     (90 + 0.25 * 50) / 1.25
-    //     = 82
-    //
-    // B ES:
-    //     (60 + 0.25 * 40) / 1.25
-    //     = 56
-    //
-    // 82 + 56 = 138
+    // Only the worst scenario contributes: portfolio ES = 150,
+    // A component ES = 90, and B component ES = 60.
+    // The components reconcile: 90 + 60 = 150.
     //
     // Both contributions must be positive.
     // ============================================================
@@ -618,36 +559,29 @@ std::cout << "Running Test 8\n";
             150.0,
             150.0
         };
-
         ql::RiskAttribution attribution;
-
         const auto result =
             attribution.calculate(riskResult, 0.75);
-
         expectNear(
             "Correlated A component ES",
             result.componentES.at("A"),
             90.0,
             1e-12
         );
-
         expectNear(
             "Correlated B component ES",
             result.componentES.at("B"),
             60.0,
             1e-12
         );
-
         expectTrue(
             "Correlated A contribution should be positive",
             result.componentES.at("A") > 0.0
         );
-
         expectTrue(
             "Correlated B contribution should be positive",
             result.componentES.at("B") > 0.0
         );
-
         expectNear(
             "Correlated positions reconcile",
             result.componentES.at("A") +
@@ -670,19 +604,11 @@ std::cout << "Running Test 8\n";
     //
     // At 75% confidence:
     //
-    // Portfolio ES:
-    //     (100 + 0.25 * 80) / 1.25
-    //     = 96
+    //     tailSize = (1 - 0.75) * 3 = 0.75
     //
-    // A:
-    //     (130 + 0.25 * 100) / 1.25
-    //     = 124
-    //
-    // HEDGE:
-    //     (-30 + 0.25 * -20) / 1.25
-    //     = -28
-    //
-    // 124 + (-28) = 96
+    // Only the worst scenario contributes: portfolio ES = 100,
+    // A component ES = 130, and HEDGE component ES = -30.
+    // The components reconcile: 130 + (-30) = 100.
     //
     // The hedge therefore reduces portfolio ES.
     // ============================================================
@@ -714,31 +640,25 @@ std::cout << "Running Test 9\n";
             100.0,
             100.0
         };
-
         ql::RiskAttribution attribution;
-
         const auto result =
             attribution.calculate(riskResult, 0.75);
-
         expectNear(
             "Hedge A component ES",
             result.componentES.at("A"),
             130.0,
             1e-12
         );
-
         expectNear(
             "Hedge component ES",
             result.componentES.at("HEDGE"),
             -30.0,
             1e-12
         );
-
         expectTrue(
             "Hedge contribution should be negative",
             result.componentES.at("HEDGE") < 0.0
         );
-
         expectNear(
             "Hedge reduces portfolio ES",
             result.componentES.at("A") +
@@ -746,7 +666,6 @@ std::cout << "Running Test 9\n";
             100.0,
             1e-12
         );
-
         expectNear(
             "Hedge contribution percentage",
             result.contributionPercent.at("HEDGE"),
@@ -773,16 +692,15 @@ std::cout << "Running Test 9\n";
     //
     // At 75% confidence:
     //
-    // ES:
-    //     (100 + 0.25 * 50) / 1.25
-    //     = 90
+    //     tailSize = (1 - 0.75) * 3 = 0.75
+    //
+    // Only the worst scenario contributes, so component ES = 100.
     // ============================================================
     std::cout << "Running Test 10\n";
     {
         // This is the already-aggregated result that
         // PortfolioHistoricalRisk produces for multiple lots
         // having the same instrument ID.
-
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
             0.0,
@@ -805,48 +723,167 @@ std::cout << "Running Test 9\n";
             100.0,
             100.0
         };
-
         ql::RiskAttribution attribution;
-
         const auto result =
             attribution.calculate(riskResult, 0.75);
-
         expectNear(
             "Multiple lots aggregate into one instrument ES",
             result.componentES.at("A"),
             100.0,
             1e-12
         );
-
         expectNear(
             "Multiple lots reconcile with portfolio ES",
             result.componentES.at("A"),
             result.totalES,
             1e-12
         );
-
         expectNear(
             "Multiple lots contribution percentage",
             result.contributionPercent.at("A"),
             100.0,
             1e-12
         );
-
         expectTrue(
             "Multiple lots produce one instrument component",
             result.componentES.size() == 1
         );
     }
-
-        std::cout << "All RiskAttribution tests passed.\n";
-
+    // ============================================================
+    // Test 11: Zero portfolio ES when all scenarios are profitable
+    //
+    // The portfolio risk engine clamps Expected Shortfall to zero.
+    // Attribution must return zero component ES and zero contribution
+    // percentages instead of failing reconciliation.
+    // ============================================================
+    std::cout << "Running Test 11\n";
+    {
+        ql::PortfolioHistoricalRiskResult riskResult{
+            1000.0,
+            0.0,
+            {
+                "2026-01-02",
+                "2026-01-03",
+                "2026-01-04"
+            },
+            {
+                10.0,
+                20.0,
+                30.0
+            },
+            {
+                {
+                    "A",
+                    {5.0, 10.0, 15.0}
+                },
+                {
+                    "B",
+                    {5.0, 10.0, 15.0}
+                }
+            },
+            0.0,
+            0.0
+        };
+        ql::RiskAttribution attribution;
+        const auto result = attribution.calculate(riskResult, 0.80);
+        expectNear("Zero ES total", result.totalES, 0.0, 1e-12);
+        expectNear("Zero ES component A", result.componentES.at("A"), 0.0, 1e-12);
+        expectNear("Zero ES component B", result.componentES.at("B"), 0.0, 1e-12);
+        expectNear("Zero ES contribution A", result.contributionPercent.at("A"), 0.0, 1e-12);
+        expectNear("Zero ES contribution B", result.contributionPercent.at("B"), 0.0, 1e-12);
+        expectTrue(
+            "Zero ES returns one component per instrument",
+            result.componentES.size() == 2 &&
+            result.contributionPercent.size() == 2
+        );
+    }
+    // ============================================================
+    // Test 12: Reject mismatched P&Ls in a non-tail scenario
+    //
+    // At 80% confidence with five scenarios, only the worst
+    // scenario is in the ES tail. Scenario index 4 is profitable
+    // and outside the tail, but its instrument P&Ls do not sum
+    // to the portfolio P&L. The input must still be rejected.
+    // ============================================================
+    std::cout << "Running Test 12\n";
+    {
+        ql::PortfolioHistoricalRiskResult riskResult{
+            1000.0,
+            0.0,
+            {
+                "2026-01-02",
+                "2026-01-03",
+                "2026-01-04",
+                "2026-01-05",
+                "2026-01-06"
+            },
+            {
+                -100.0,
+                -20.0,
+                0.0,
+                20.0,
+                40.0
+            },
+            {
+                {
+                    "A",
+                    {-70.0, -10.0, 0.0, 10.0, 20.0}
+                },
+                {
+                    "B",
+                    {-30.0, -10.0, 0.0, 10.0, 25.0}
+                }
+            },
+            100.0,
+            100.0
+        };
+        ql::RiskAttribution attribution;
+        bool threwExpectedException = false;
+        try {
+            (void)attribution.calculate(riskResult, 0.80);
+        } catch (const std::invalid_argument& e) {
+            threwExpectedException = true;
+            expectTrue(
+                "Mismatch error identifies non-tail scenario index",
+                std::string(e.what()).find("scenario index 4") !=
+                    std::string::npos
+            );
+        }
+        expectTrue(
+            "Non-tail scenario P&L mismatch is rejected",
+            threwExpectedException
+        );
+    }
+    // Test 13: Reject results without instrument-level scenario P&L.
+    {
+        ql::PortfolioHistoricalRiskResult riskResult{
+            1000.0,
+            0.0,
+            {"2026-01-02", "2026-01-03"},
+            {-100.0, 50.0},
+            {},
+            100.0,
+            100.0
+        };
+        ql::RiskAttribution attribution;
+        bool threwExpectedException = false;
+        try {
+            (void)attribution.calculate(riskResult, 0.50);
+        } catch (const std::invalid_argument&) {
+            threwExpectedException = true;
+        }
+        expectTrue(
+            "Missing instrument scenario P&Ls are rejected",
+            threwExpectedException
+        );
+    }
+    std::cout << "All RiskAttribution tests passed.\n";
     return 0;
 }
 catch (const std::exception& e) {
     std::cerr << "TEST EXCEPTION: "
               << e.what()
               << '\n';
-
     return 1;
 }
 }

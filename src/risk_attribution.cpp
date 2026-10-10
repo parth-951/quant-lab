@@ -4,6 +4,7 @@
 #include <cmath>
 #include <map>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace ql {
@@ -37,6 +38,12 @@ RiskAttributionResult RiskAttribution::calculate(
         );
     }
 
+    if (riskResult.instrumentScenarioPnl.empty()) {
+        throw std::invalid_argument(
+            "Risk result must contain instrument scenario P&Ls"
+        );
+    }
+
     // ------------------------------------------------------------
     // Validate per-instrument scenario P&Ls.
     // ------------------------------------------------------------
@@ -53,12 +60,80 @@ RiskAttributionResult RiskAttribution::calculate(
     }
 
     // ------------------------------------------------------------
+    // Validate that instrument P&Ls sum to the portfolio P&L
+    // for every scenario, not just the ES-tail scenarios.
+    // ------------------------------------------------------------
+
+    for (std::size_t scenarioIndex = 0;
+         scenarioIndex < scenarioCount;
+         ++scenarioIndex) {
+
+        double instrumentPnlTotal = 0.0;
+
+        for (const auto& [instrumentId, instrumentPnl] :
+             riskResult.instrumentScenarioPnl) {
+
+            instrumentPnlTotal += instrumentPnl[scenarioIndex];
+        }
+
+        const double portfolioPnl =
+            riskResult.scenarioPnl[scenarioIndex];
+
+        const double tolerance =
+            1e-10 * std::max({
+                1.0,
+                std::abs(instrumentPnlTotal),
+                std::abs(portfolioPnl)
+            });
+
+        if (!std::isfinite(instrumentPnlTotal) ||
+            !std::isfinite(portfolioPnl) ||
+            std::abs(instrumentPnlTotal - portfolioPnl) > tolerance) {
+
+            throw std::invalid_argument(
+                "Instrument scenario P&Ls do not sum to portfolio "
+                "scenario P&L at scenario index " +
+                std::to_string(scenarioIndex)
+            );
+        }
+    }
+
+    // ------------------------------------------------------------
+    // Portfolio ES follows the portfolio risk engine convention:
+    // ES is clamped to zero when the raw tail loss is negative.
+    // In that case, component ES values must also be zero so
+    // that attribution reconciles with the reported portfolio ES.
+    // ------------------------------------------------------------
+
+    const double totalES =
+        riskResult.expectedShortfall;
+
+    if (!std::isfinite(totalES) || totalES < 0.0) {
+        throw std::invalid_argument(
+            "Portfolio Expected Shortfall must be finite and non-negative"
+        );
+    }
+
+    if (totalES == 0.0) {
+        std::map<std::string, double> componentES;
+        std::map<std::string, double> contributionPercent;
+
+        for (const auto& [instrumentId, instrumentPnl] :
+             riskResult.instrumentScenarioPnl) {
+            componentES[instrumentId] = 0.0;
+            contributionPercent[instrumentId] = 0.0;
+        }
+
+        return {
+            componentES,
+            contributionPercent,
+            totalES
+        };
+    }
+
+    // ------------------------------------------------------------
     // Sort scenario indices by total scenario P&L:
-    //
-    // worst loss -> best outcome
-    //
-    // We sort indices rather than the P&Ls themselves so that
-    // instrument P&Ls remain aligned with their scenarios.
+    // worst loss -> best outcome.
     // ------------------------------------------------------------
 
     std::vector<std::size_t> sortedIndices(scenarioCount);
@@ -77,14 +152,8 @@ RiskAttributionResult RiskAttribution::calculate(
     );
 
     // ------------------------------------------------------------
-    // Same Expected Shortfall tail definition used by
-    // HistoricalRisk.
-    //
-    // tailSize = (1 - confidence) * number of observations
-    //
-    // Take:
-    //   floor(tailSize) full observations
-    //   + fractional part of the next observation
+    // Use the same Expected Shortfall tail definition as the
+    // historical risk engine, including fractional observations.
     // ------------------------------------------------------------
 
     const double tailSize =
@@ -98,35 +167,29 @@ RiskAttributionResult RiskAttribution::calculate(
     }
 
     const std::size_t fullTailCount =
-        static_cast<std::size_t>(
-            std::floor(tailSize)
-        );
+        static_cast<std::size_t>(std::floor(tailSize));
 
     const double fractionalPart =
-        tailSize -
-        static_cast<double>(fullTailCount);
+        tailSize - static_cast<double>(fullTailCount);
 
     // ------------------------------------------------------------
-    // Calculate component ES.
+    // Calculate signed component ES.
+    // Negative component ES is retained for hedging positions
+    // when total portfolio ES is positive.
     // ------------------------------------------------------------
 
-    std::map<std::string, double> componentTailLoss;
+    std::map<std::string, double> componentES;
 
     for (const auto& [instrumentId, instrumentPnl] :
          riskResult.instrumentScenarioPnl) {
 
         double tailLoss = 0.0;
 
-        // Full tail observations.
         for (std::size_t i = 0; i < fullTailCount; ++i) {
-
-            const std::size_t scenarioIndex =
-                sortedIndices[i];
-
+            const std::size_t scenarioIndex = sortedIndices[i];
             tailLoss += -instrumentPnl[scenarioIndex];
         }
 
-        // Fractional tail observation.
         if (fractionalPart > 0.0 &&
             fullTailCount < scenarioCount) {
 
@@ -134,36 +197,20 @@ RiskAttributionResult RiskAttribution::calculate(
                 sortedIndices[fullTailCount];
 
             tailLoss +=
-                fractionalPart *
-                (-instrumentPnl[scenarioIndex]);
+                fractionalPart * (-instrumentPnl[scenarioIndex]);
         }
 
-        // Do not clamp component ES.
-        // A negative value represents a hedge.
-        componentTailLoss[instrumentId] =
-            tailLoss / tailSize;
+        componentES[instrumentId] = tailLoss / tailSize;
     }
 
     // ------------------------------------------------------------
-    // Portfolio Expected Shortfall.
-    // ------------------------------------------------------------
-
-    const double totalES =
-        riskResult.expectedShortfall;
-
-    // ------------------------------------------------------------
-    // Reconcile component ES against portfolio ES.
-    //
-    // The sum of all component ES values must equal the
-    // portfolio Expected Shortfall within numerical tolerance.
+    // Reconcile component ES against the reported portfolio ES.
     // ------------------------------------------------------------
 
     double componentESTotal = 0.0;
 
-    for (const auto& [instrumentId, componentES] :
-         componentTailLoss) {
-
-        componentESTotal += componentES;
+    for (const auto& [instrumentId, value] : componentES) {
+        componentESTotal += value;
     }
 
     const double reconciliationTolerance =
@@ -179,38 +226,18 @@ RiskAttributionResult RiskAttribution::calculate(
     }
 
     // ------------------------------------------------------------
-    // Calculate percentage contribution.
+    // Calculate percentage contributions.
     // ------------------------------------------------------------
 
     std::map<std::string, double> contributionPercent;
 
-    if (std::abs(totalES) > 1e-15) {
-
-        for (const auto& [instrumentId, componentES] :
-             componentTailLoss) {
-
-            contributionPercent[instrumentId] =
-                (componentES / totalES) * 100.0;
-        }
-
-    } else {
-
-        // If portfolio ES is zero, percentage contribution is
-        // undefined. Return zero rather than dividing by zero.
-
-        for (const auto& [instrumentId, componentES] :
-             componentTailLoss) {
-
-            contributionPercent[instrumentId] = 0.0;
-        }
+    for (const auto& [instrumentId, value] : componentES) {
+        contributionPercent[instrumentId] =
+            (value / totalES) * 100.0;
     }
 
-    // ------------------------------------------------------------
-    // Return complete attribution result.
-    // ------------------------------------------------------------
-
     return {
-        componentTailLoss,
+        componentES,
         contributionPercent,
         totalES
     };
