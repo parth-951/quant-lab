@@ -28,6 +28,8 @@ add_library(quant_lab_core
     src/covariance_matrix.cpp
     src/portfolio_volatility.cpp
     src/portfolio_optimizer.cpp
+    src/parametric_var.cpp
+    src/efficient_frontier.cpp
     src/validation.cpp
 )
 
@@ -149,5 +151,31 @@ if(BUILD_TESTING)
     add_test(
         NAME quant_lab_portfolio_optimizer_tests
         COMMAND quant_lab_portfolio_optimizer_tests
+    )
+
+    add_executable(
+        quant_lab_parametric_var_tests
+        tests/parametric_var_tests.cpp
+    )
+    target_link_libraries(
+        quant_lab_parametric_var_tests
+        PRIVATE quant_lab_core
+    )
+    add_test(
+        NAME quant_lab_parametric_var_tests
+        COMMAND quant_lab_parametric_var_tests
+    )
+
+    add_executable(
+        quant_lab_efficient_frontier_tests
+        tests/efficient_frontier_tests.cpp
+    )
+    target_link_libraries(
+        quant_lab_efficient_frontier_tests
+        PRIVATE quant_lab_core
+    )
+    add_test(
+        NAME quant_lab_efficient_frontier_tests
+        COMMAND quant_lab_efficient_frontier_tests
     )
 endif()
