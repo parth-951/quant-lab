@@ -12,8 +12,8 @@ struct RiskAttributionResult {
     // Negative = offsets portfolio tail loss.
     std::map<std::string, double> componentES;
 
-    // Component ES as a fraction of total portfolio ES.
-    // Example: 0.25 = 25%.
+    // Component ES contribution expressed in percentage points.
+    // Example: 25.0 = 25%.
     std::map<std::string, double> contributionPercent;
 
     // Portfolio Expected Shortfall.

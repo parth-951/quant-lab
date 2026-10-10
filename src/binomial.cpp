@@ -41,7 +41,6 @@ double BinomialTree::price(
 
 
     const double S = market.spot;
-    const double K = option.strike;
     const double r = market.rate;
     const double sigma = market.volatility;
     const double T = option.maturity;

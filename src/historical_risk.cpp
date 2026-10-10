@@ -1,3 +1,4 @@
+
 #include "historical_risk.hpp"
 
 #include "historical_var.hpp"
@@ -14,49 +15,63 @@ HistoricalRiskResult HistoricalRisk::calculate(
     const std::vector<double>& prices,
     double confidenceLevel
 ) const {
+    const std::vector<double> returns = historicalReturns(prices);
+
+    return calculateFromReturns(returns, confidenceLevel);
+}
+
+HistoricalRiskResult HistoricalRisk::calculateFromReturns(
+    const std::vector<double>& returns,
+    double confidenceLevel
+) const {
+    if (returns.empty()) {
+        throw std::invalid_argument(
+            "Returns series must not be empty."
+        );
+    }
+
     if (!std::isfinite(confidenceLevel) ||
         confidenceLevel <= 0.0 ||
         confidenceLevel >= 1.0) {
         throw std::invalid_argument(
-            "Confidence level must be between 0 and 1"
+            "Confidence level must be between 0 and 1."
         );
     }
 
-    // Step 1: Convert prices into historical returns.
-    const std::vector<double> returns =
-        historicalReturns(prices);
+    for (double value : returns) {
+        if (!std::isfinite(value)) {
+            throw std::invalid_argument(
+                "Returns series contains a non-finite value."
+            );
+        }
+    }
 
-    // Step 2: Calculate Historical VaR.
+    // Calculate Historical VaR.
     HistoricalVaR varCalculator;
 
     const double var =
         varCalculator.calculate(returns, confidenceLevel);
 
-    // Step 3: Sort returns from worst to best.
+    // Sort returns from worst to best.
     std::vector<double> sortedReturns = returns;
 
-    std::sort(
-        sortedReturns.begin(),
-        sortedReturns.end()
-    );
+    std::sort(sortedReturns.begin(), sortedReturns.end());
 
-    // Size of the worst (1 - confidenceLevel) tail.
+    // Number of observations in the worst (1 - confidence) tail.
     const double tailSize =
         (1.0 - confidenceLevel) *
         static_cast<double>(sortedReturns.size());
 
-    double tailLoss = 0.0;
-
     const auto fullTailCount =
         static_cast<std::size_t>(std::floor(tailSize));
 
-    // Add complete observations from the worst tail.
+    double tailLoss = 0.0;
+
     for (std::size_t i = 0; i < fullTailCount; ++i) {
         tailLoss += -sortedReturns[i];
     }
 
-    // Add the fractional observation when the tail does not
-    // contain a whole number of observations.
+    // Include a fractional observation at the tail boundary.
     const double fractionalPart =
         tailSize - static_cast<double>(fullTailCount);
 
@@ -66,13 +81,15 @@ HistoricalRiskResult HistoricalRisk::calculate(
             fractionalPart * (-sortedReturns[fullTailCount]);
     }
 
-    double expectedShortfall = tailLoss / tailSize;
+    const double expectedShortfall =
+        std::max(0.0, tailLoss / tailSize);
 
-    // Risk metrics represent potential loss.
-    // If the historical tail contains no losses, report zero
-    // rather than a negative risk value.
-    expectedShortfall =
-        std::max(0.0, expectedShortfall);
+    if (!std::isfinite(var) ||
+        !std::isfinite(expectedShortfall)) {
+        throw std::overflow_error(
+            "Historical risk calculation produced a non-finite result."
+        );
+    }
 
     return {
         returns,

@@ -23,12 +23,7 @@ void expectNear(
     }
 }
 
-void expectTrue(const std::string& name, bool condition) {
-    if (!condition) {
-        std::cerr << "FAILED: " << name << '\n';
-        std::exit(1);
-    }
-}
+
 
 template <typename Exception, typename Function>
 void expectThrows(const std::string& name, Function function) {

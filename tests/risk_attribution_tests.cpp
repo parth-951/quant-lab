@@ -30,6 +30,33 @@ void expectTrue(
         std::exit(1);
     }
 }
+template <typename Function>
+void expectInvalidArgument(
+    const std::string& name,
+    Function function,
+    const std::string& expectedMessage = {}
+) {
+    try {
+        function();
+    } catch (const std::invalid_argument& e) {
+        if (!expectedMessage.empty() &&
+            std::string(e.what()).find(expectedMessage) == std::string::npos) {
+            std::cerr << "FAILED: " << name
+                      << " | exception message did not contain: "
+                      << expectedMessage << '\n';
+            std::exit(1);
+        }
+        return;
+    } catch (...) {
+        std::cerr << "FAILED: " << name
+                  << " (wrong exception type)\n";
+        std::exit(1);
+    }
+
+    std::cerr << "FAILED: " << name
+              << " (no std::invalid_argument thrown)\n";
+    std::exit(1);
+}
 } // namespace
 int main() {
     try{
@@ -52,7 +79,6 @@ int main() {
     //     B ES = 30
     //     Total = 100
     // ============================================================
-        std::cout << "Running Test 1\n";
     {
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
@@ -110,32 +136,12 @@ int main() {
         );
     }
     // ============================================================
-    // Test 2: Fractional tail
-    //
-    // Five scenarios, 80% confidence:
-    //
-    // tailSize = (1 - 0.80) * 5
-    //          = 1
-    //
-    // Use the worst observation completely.
-    //
-    // Then test 60% confidence:
-    //
-    // tailSize = 0.40 * 5
-    //          = 2
-    //
-    // Two complete observations.
-    //
-    // We additionally test a genuinely fractional tail using
-    // 75% confidence:
-    //
-    // tailSize = 0.25 * 5
-    //          = 1.25
-    //
-    // First observation gets weight 1.
-    // Second observation gets weight 0.25.
-    // ============================================================
-std::cout << "Running Test 2\n";
+    // Test 2: Fractional tail at 75% confidence.
+//
+// Five scenarios give a tail size of 0.25 * 5 = 1.25.
+// The worst observation receives weight 1, and the second-worst
+// receives weight 0.25.
+// ============================================================
     {
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
@@ -226,7 +232,6 @@ std::cout << "Running Test 2\n";
     //
     // 130 + (-30) = 100
     // ============================================================
-std::cout << "Running Test 3\n";
     {
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
@@ -289,7 +294,6 @@ std::cout << "Running Test 3\n";
     // A contributes 70 -> 70%
     // B contributes 30 -> 30%
     // ============================================================
-std::cout << "Running Test 4\n";
     {
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
@@ -336,7 +340,6 @@ std::cout << "Running Test 4\n";
     // ============================================================
     // Test 5: Risk contribution percentages sum to 100%
     // ============================================================
-std::cout << "Running Test 5\n";
     {
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
@@ -391,7 +394,6 @@ std::cout << "Running Test 5\n";
     // HEDGE = -30%
     // Total = 100%
     // ============================================================
-std::cout << "Running Test 6\n";
     {
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
@@ -461,7 +463,6 @@ std::cout << "Running Test 6\n";
     // Only the worst scenario contributes, so the single-position
     // component ES and portfolio ES are both 100.
     // ============================================================
-std::cout << "Running Test 7\n";
     {
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
@@ -531,7 +532,6 @@ std::cout << "Running Test 7\n";
     //
     // Both contributions must be positive.
     // ============================================================
-std::cout << "Running Test 8\n";
     {
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
@@ -612,7 +612,6 @@ std::cout << "Running Test 8\n";
     //
     // The hedge therefore reduces portfolio ES.
     // ============================================================
-std::cout << "Running Test 9\n";
     {
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
@@ -696,7 +695,6 @@ std::cout << "Running Test 9\n";
     //
     // Only the worst scenario contributes, so component ES = 100.
     // ============================================================
-    std::cout << "Running Test 10\n";
     {
         // This is the already-aggregated result that
         // PortfolioHistoricalRisk produces for multiple lots
@@ -756,7 +754,6 @@ std::cout << "Running Test 9\n";
     // Attribution must return zero component ES and zero contribution
     // percentages instead of failing reconciliation.
     // ============================================================
-    std::cout << "Running Test 11\n";
     {
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
@@ -805,7 +802,6 @@ std::cout << "Running Test 9\n";
     // and outside the tail, but its instrument P&Ls do not sum
     // to the portfolio P&L. The input must still be rejected.
     // ============================================================
-    std::cout << "Running Test 12\n";
     {
         ql::PortfolioHistoricalRiskResult riskResult{
             1000.0,
@@ -838,20 +834,10 @@ std::cout << "Running Test 9\n";
             100.0
         };
         ql::RiskAttribution attribution;
-        bool threwExpectedException = false;
-        try {
-            (void)attribution.calculate(riskResult, 0.80);
-        } catch (const std::invalid_argument& e) {
-            threwExpectedException = true;
-            expectTrue(
-                "Mismatch error identifies non-tail scenario index",
-                std::string(e.what()).find("scenario index 4") !=
-                    std::string::npos
-            );
-        }
-        expectTrue(
+        expectInvalidArgument(
             "Non-tail scenario P&L mismatch is rejected",
-            threwExpectedException
+            [&] { (void)attribution.calculate(riskResult, 0.80); },
+            "scenario index 4"
         );
     }
     // Test 13: Reject results without instrument-level scenario P&L.
@@ -866,18 +852,11 @@ std::cout << "Running Test 9\n";
             100.0
         };
         ql::RiskAttribution attribution;
-        bool threwExpectedException = false;
-        try {
-            (void)attribution.calculate(riskResult, 0.50);
-        } catch (const std::invalid_argument&) {
-            threwExpectedException = true;
-        }
-        expectTrue(
+        expectInvalidArgument(
             "Missing instrument scenario P&Ls are rejected",
-            threwExpectedException
+            [&] { (void)attribution.calculate(riskResult, 0.50); }
         );
     }
-    std::cout << "All RiskAttribution tests passed.\n";
     return 0;
 }
 catch (const std::exception& e) {

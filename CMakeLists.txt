@@ -20,6 +20,7 @@ add_library(quant_lab_core
     src/portfolio.cpp
     src/position.cpp
     src/portfolio_exposure.cpp
+    src/portfolio_stress.cpp
     src/portfolio_historical_risk.cpp
     src/random.cpp
     src/returns.cpp
@@ -31,6 +32,13 @@ add_library(quant_lab_core
     src/parametric_var.cpp
     src/efficient_frontier.cpp
     src/validation.cpp
+    src/parametric_es.cpp
+    src/risk_comparison.cpp
+    src/var_backtesting.cpp
+    src/csv_market_data_loader.cpp
+    src/normal_distribution.cpp
+    src/portfolio_weight_validation.cpp
+    src/rolling_var_backtest.cpp
 )
 
 target_include_directories(quant_lab_core
@@ -177,5 +185,81 @@ if(BUILD_TESTING)
     add_test(
         NAME quant_lab_efficient_frontier_tests
         COMMAND quant_lab_efficient_frontier_tests
+    )
+    add_executable(
+        quant_lab_parametric_es_tests
+        tests/parametric_es_tests.cpp
+    )
+    target_link_libraries(
+        quant_lab_parametric_es_tests
+        PRIVATE quant_lab_core
+    )
+    add_test(
+        NAME quant_lab_parametric_es_tests
+        COMMAND quant_lab_parametric_es_tests
+    )
+
+    add_executable(
+        quant_lab_risk_comparison_tests
+        tests/risk_comparison_tests.cpp
+    )
+    target_link_libraries(
+        quant_lab_risk_comparison_tests
+        PRIVATE quant_lab_core
+    )
+    add_test(
+        NAME quant_lab_risk_comparison_tests
+        COMMAND quant_lab_risk_comparison_tests
+    )
+
+    add_executable(
+        quant_lab_var_backtesting_tests
+        tests/var_backtesting_tests.cpp
+    )
+    target_link_libraries(
+        quant_lab_var_backtesting_tests
+        PRIVATE quant_lab_core
+    )
+    add_test(
+        NAME quant_lab_var_backtesting_tests
+        COMMAND quant_lab_var_backtesting_tests
+    )
+        add_executable(
+        quant_lab_csv_market_data_loader_tests
+        tests/csv_market_data_loader_tests.cpp
+    )
+    target_link_libraries(
+        quant_lab_csv_market_data_loader_tests
+        PRIVATE quant_lab_core
+    )
+    add_test(
+        NAME quant_lab_csv_market_data_loader_tests
+        COMMAND quant_lab_csv_market_data_loader_tests
+    )
+        add_executable(
+        quant_lab_portfolio_stress_tests
+        tests/portfolio_stress_tests.cpp
+    )
+
+    target_link_libraries(
+        quant_lab_portfolio_stress_tests
+        PRIVATE quant_lab_core
+    )
+
+    add_test(
+        NAME quant_lab_portfolio_stress_tests
+        COMMAND quant_lab_portfolio_stress_tests
+    )
+    add_executable(
+        quant_lab_rolling_var_backtest_tests
+        tests/rolling_var_backtest_tests.cpp
+    )
+    target_link_libraries(
+        quant_lab_rolling_var_backtest_tests
+        PRIVATE quant_lab_core
+    )
+    add_test(
+        NAME quant_lab_rolling_var_backtest_tests
+        COMMAND quant_lab_rolling_var_backtest_tests
     )
 endif()

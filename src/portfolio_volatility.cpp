@@ -1,10 +1,11 @@
+
 #include "portfolio_volatility.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <stdexcept>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 
 namespace ql {
@@ -18,7 +19,9 @@ void validateInputs(
             "Portfolio volatility requires at least one weight");
     }
 
-    if (covarianceMatrix.size() != weights.size()) {
+    const std::size_t n = weights.size();
+
+    if (covarianceMatrix.size() != n) {
         throw std::invalid_argument(
             "Covariance matrix dimensions must match the number of weights");
     }
@@ -30,23 +33,28 @@ void validateInputs(
         }
     }
 
-    const std::size_t n = weights.size();
-    for (std::size_t i = 0; i < n; ++i) {
-        if (covarianceMatrix[i].size() != n) {
+    // Pass 1: validate every row before indexing any other row.
+    // This prevents out-of-bounds access for malformed matrices.
+    for (const auto& row : covarianceMatrix) {
+        if (row.size() != n) {
             throw std::invalid_argument(
                 "Covariance matrix must be square");
         }
 
-        for (std::size_t j = 0; j < n; ++j) {
-            if (!std::isfinite(covarianceMatrix[i][j])) {
+        for (double value : row) {
+            if (!std::isfinite(value)) {
                 throw std::invalid_argument(
                     "Covariance matrix values must all be finite");
             }
+        }
+    }
 
+    // Pass 2: check symmetry only after all dimensions are validated.
+    for (std::size_t i = 0; i < n; ++i) {
+        for (std::size_t j = i + 1; j < n; ++j) {
             const double a = covarianceMatrix[i][j];
-            const double b = covarianceMatrix[j].size() == n
-                ? covarianceMatrix[j][i]
-                : a;
+            const double b = covarianceMatrix[j][i];
+
             const double tolerance =
                 1e-10 * std::max({1.0, std::abs(a), std::abs(b)});
 
@@ -78,6 +86,7 @@ double PortfolioVolatility::variance(
     }
 
     double portfolioVariance = static_cast<double>(result);
+
     if (!std::isfinite(portfolioVariance)) {
         throw std::overflow_error(
             "Portfolio variance calculation produced a non-finite result");
@@ -86,18 +95,22 @@ double PortfolioVolatility::variance(
     // A valid covariance matrix cannot produce negative variance. Permit tiny
     // negative round-off, but reject materially negative results.
     double scale = 1.0;
+
     for (const auto& row : covarianceMatrix) {
         for (double value : row) {
             scale = std::max(scale, std::abs(value));
         }
     }
+
     for (double weight : weights) {
         scale *= std::max(1.0, std::abs(weight));
+
         if (!std::isfinite(scale)) {
             scale = std::numeric_limits<double>::max();
             break;
         }
     }
+
     const double tolerance = 1e-12 * scale;
 
     if (portfolioVariance < -tolerance) {
