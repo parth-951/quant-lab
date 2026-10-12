@@ -7,32 +7,40 @@
 
 namespace ql {
 
+enum class PortfolioValueMode {
+    FixedNotional,
+    Compounded
+};
+
 struct RollingVaRBacktestResult {
-    // Forecasts and realized losses, aligned by forecast day.
     std::vector<double> predictedVaR;
     std::vector<double> realizedLosses;
-
-    // Original return-series index for each forecast.
     std::vector<std::size_t> forecastIndices;
-
-    // Results from the existing Kupiec backtester.
     VaRBacktestResult backtest;
 };
 
 class RollingVaRBacktest {
 public:
-    // Returns are decimal daily portfolio returns, e.g. -0.02 = -2%.
-    // The portfolio value is held constant across the backtest.
-    //
-    // Each forecast uses exactly the preceding lookbackWindow returns.
-    // The next return is used only to calculate the realized loss.
     [[nodiscard]] static RollingVaRBacktestResult run(
         const std::vector<double>& returns,
         std::size_t lookbackWindow,
         double portfolioValue,
         double confidenceLevel,
-        double significanceLevel = 0.05
-    );
+        double significanceLevel = 0.05,
+        PortfolioValueMode valueMode = PortfolioValueMode::FixedNotional);
+
+    [[nodiscard]] static RollingVaRBacktestResult runPnl(
+        const std::vector<double>& predictedVaR,
+        const std::vector<double>& realizedPnl,
+        double confidenceLevel,
+        double significanceLevel = 0.05);
+
+    [[nodiscard]] static RollingVaRBacktestResult runPortfolioPnl(
+        const std::vector<double>& predictedVaR,
+        const std::vector<double>& realizedPnl,
+        const std::vector<double>& portfolioValues,
+        double confidenceLevel,
+        double significanceLevel = 0.05);
 };
 
 } // namespace ql
