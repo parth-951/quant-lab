@@ -5,6 +5,7 @@
 #include "normal_distribution.hpp"
 #include "portfolio_weight_validation.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <stdexcept>
@@ -18,6 +19,23 @@ double ParametricES::calculate(
     const CovarianceMatrix::Matrix& covarianceMatrix,
     double confidenceLevel,
     std::size_t horizonDays) {
+
+    return calculate(
+        portfolioValue,
+        weights,
+        covarianceMatrix,
+        confidenceLevel,
+        horizonDays,
+        0.0);
+}
+
+double ParametricES::calculate(
+    double portfolioValue,
+    const std::vector<double>& weights,
+    const CovarianceMatrix::Matrix& covarianceMatrix,
+    double confidenceLevel,
+    std::size_t horizonDays,
+    double expectedReturn) {
 
     if (!std::isfinite(portfolioValue) || portfolioValue < 0.0) {
         throw std::invalid_argument(
@@ -36,18 +54,22 @@ double ParametricES::calculate(
             "Horizon must be at least one day.");
     }
 
+    if (!std::isfinite(expectedReturn)) {
+        throw std::invalid_argument(
+            "Expected return must be finite.");
+    }
+
     validatePortfolioWeights(weights);
 
-    // Also validates covariance dimensions, finiteness, and symmetry.
-    const double volatility =
+    const double dailyVolatility =
         PortfolioVolatility::volatility(weights, covarianceMatrix);
 
-    if (!std::isfinite(volatility) || volatility < 0.0) {
+    if (!std::isfinite(dailyVolatility) || dailyVolatility < 0.0) {
         throw std::invalid_argument(
             "Portfolio volatility must be finite and nonnegative.");
     }
 
-    if (portfolioValue == 0.0 || volatility == 0.0) {
+    if (portfolioValue == 0.0) {
         return 0.0;
     }
 
@@ -56,19 +78,31 @@ double ParametricES::calculate(
 
     const double density = NormalDistribution::pdf(z);
 
-    const double result =
-        portfolioValue
-        * volatility
-        * std::sqrt(static_cast<double>(horizonDays))
-        * density
-        / (1.0 - confidenceLevel);
+    const double horizon =
+        static_cast<double>(horizonDays);
 
-    if (!std::isfinite(result)) {
+    const double expectedHorizonReturn =
+        expectedReturn * horizon;
+
+    const double horizonVolatility =
+        dailyVolatility * std::sqrt(horizon);
+
+    const double tailLossFraction =
+        horizonVolatility * density / (1.0 - confidenceLevel)
+        - expectedHorizonReturn;
+
+    const double result = portfolioValue * tailLossFraction;
+
+    if (!std::isfinite(expectedHorizonReturn) ||
+        !std::isfinite(horizonVolatility) ||
+        !std::isfinite(tailLossFraction) ||
+        !std::isfinite(result)) {
         throw std::overflow_error(
             "Calculated ES is not finite.");
     }
 
-    return result;
+    // ES is reported as a nonnegative expected loss.
+    return std::max(0.0, result);
 }
 
 } // namespace ql

@@ -1,3 +1,4 @@
+
 #include "parametric_var.hpp"
 #include "portfolio_volatility.hpp"
 
@@ -64,14 +65,13 @@ int main() {
     constexpr double dailyVolatility = 0.01;
     constexpr double z95 = 1.6448536269514722;
     constexpr double z99 = 2.3263478740408408;
+    constexpr double dailyExpectedReturn = 0.001;
 
     expectNear(
         "Portfolio volatility from existing module",
         ql::PortfolioVolatility::volatility(weights, covariance),
         dailyVolatility);
 
-    // VaR is a large monetary amount, so allow a small absolute tolerance
-    // for the inverse-normal approximation's floating-point error.
     expectNear(
         "One-day 95% VaR",
         calculate(),
@@ -101,17 +101,81 @@ int main() {
         calculate(0.0),
         0.0);
 
+    // Mean-return tests.
+    const double zeroDriftVaR = calculate();
+
+    const double positiveDriftVaR =
+        ql::ParametricVaR::calculate(
+            portfolioValue, weights, covariance,
+            0.95, 1, dailyExpectedReturn);
+
+    const double negativeDriftVaR =
+        ql::ParametricVaR::calculate(
+            portfolioValue, weights, covariance,
+            0.95, 1, -dailyExpectedReturn);
+
+    expectNear(
+        "Positive-drift VaR formula",
+        positiveDriftVaR,
+        portfolioValue *
+            (z95 * dailyVolatility - dailyExpectedReturn),
+        1e-3);
+
+    expectNear(
+        "Positive expected return reduces VaR",
+        positiveDriftVaR < zeroDriftVaR ? 1.0 : 0.0,
+        1.0);
+
+    expectNear(
+        "Negative expected return increases VaR",
+        negativeDriftVaR > zeroDriftVaR ? 1.0 : 0.0,
+        1.0);
+
+    expectNear(
+        "Explicit zero drift matches legacy overload",
+        ql::ParametricVaR::calculate(
+            portfolioValue, weights, covariance, 0.95, 1, 0.0),
+        zeroDriftVaR,
+        1e-8);
+
+    const double fourDayPositiveDriftVaR =
+        ql::ParametricVaR::calculate(
+            portfolioValue, weights, covariance,
+            0.95, 4, dailyExpectedReturn);
+
+    expectNear(
+        "Expected return scales linearly with horizon",
+        fourDayPositiveDriftVaR,
+        portfolioValue *
+            (z95 * dailyVolatility * 2.0
+             - dailyExpectedReturn * 4.0),
+        1e-3);
+
+    // Existing zero-volatility case.
     const ql::CovarianceMatrix::Matrix zeroCovariance{
         {0.0, 0.0},
         {0.0, 0.0}
     };
 
     expectNear(
-        "Zero volatility produces zero VaR",
+        "Zero volatility and zero drift produce zero VaR",
         ql::ParametricVaR::calculate(
             portfolioValue, weights, zeroCovariance, 0.95),
         0.0);
 
+    expectNear(
+        "Zero volatility with negative drift produces loss",
+        ql::ParametricVaR::calculate(
+            100.0, weights, zeroCovariance, 0.95, 2, -0.01),
+        2.0);
+
+    expectNear(
+        "Reported VaR is nonnegative",
+        ql::ParametricVaR::calculate(
+            100.0, weights, zeroCovariance, 0.95, 2, 0.01),
+        0.0);
+
+    // Input validation.
     expectThrows("Reject confidence level of 0.5", [] {
         (void)calculate(portfolioValue, 0.5);
     });
@@ -178,6 +242,18 @@ int main() {
 
         (void)ql::ParametricVaR::calculate(
             portfolioValue, weights, invalid, 0.95);
+    });
+
+    expectThrows("Reject NaN expected return", [] {
+        (void)ql::ParametricVaR::calculate(
+            portfolioValue, weights, covariance, 0.95, 1,
+            std::numeric_limits<double>::quiet_NaN());
+    });
+
+    expectThrows("Reject infinite expected return", [] {
+        (void)ql::ParametricVaR::calculate(
+            portfolioValue, weights, covariance, 0.95, 1,
+            std::numeric_limits<double>::infinity());
     });
 
     if (failures != 0) {
