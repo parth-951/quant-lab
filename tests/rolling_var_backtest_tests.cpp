@@ -136,6 +136,44 @@ int main() {
                   fixed.realizedLosses[0]),
             "Changing current-day return should change realized loss");
 
+        // 3b. Compounded mode must not use the current day's return
+        // to calculate that same day's VaR forecast.
+        const auto compoundedBaseline =
+            ql::RollingVaRBacktest::run(
+                returns,
+                2,
+                100.0,
+                0.75,
+                0.05,
+                ql::PortfolioValueMode::Compounded);
+
+        const auto compoundedChangedReturn =
+            ql::RollingVaRBacktest::run(
+                altered,
+                2,
+                100.0,
+                0.75,
+                0.05,
+                ql::PortfolioValueMode::Compounded);
+
+        require(
+            near(
+                compoundedChangedReturn.predictedVaR[0],
+                compoundedBaseline.predictedVaR[0]),
+            "Compounded VaR for day t must not use return[t]");
+
+        require(
+            !near(
+                compoundedChangedReturn.realizedLosses[0],
+                compoundedBaseline.realizedLosses[0]),
+            "Changing return[t] should change realized loss in compounded mode");
+
+        require(
+            !near(
+                compoundedChangedReturn.predictedVaR[1],
+                compoundedBaseline.predictedVaR[1]),
+            "A realized return should affect later compounded forecasts");
+
         // 4. Actual P&L uses conventional signs:
         // profits are positive, losses are negative.
         const auto pnlResult = ql::RollingVaRBacktest::runPnl(

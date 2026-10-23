@@ -1,4 +1,5 @@
 #include "portfolio_historical_risk.hpp"
+#include "historical_var.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -209,10 +210,18 @@ std::vector<std::string> findCommonDates(
     return commonDates;
 }
 
+
 double calculateHistoricalVaR(
     std::vector<double> scenarioPnl,
-    double confidenceLevel
+    double confidenceLevel,
+    HistoricalQuantileConvention convention
 ) {
+    if (scenarioPnl.empty()) {
+        throw std::invalid_argument(
+            "Scenario P&L must not be empty"
+        );
+    }
+
     std::sort(
         scenarioPnl.begin(),
         scenarioPnl.end()
@@ -222,23 +231,54 @@ double calculateHistoricalVaR(
         (1.0 - confidenceLevel) *
         static_cast<double>(scenarioPnl.size() - 1);
 
-    const std::size_t lowerIndex =
-        static_cast<std::size_t>(std::floor(position));
+    double quantile = 0.0;
 
-    const std::size_t upperIndex =
-        static_cast<std::size_t>(std::ceil(position));
+    switch (convention) {
+    case HistoricalQuantileConvention::LinearInterpolation: {
+        const auto lowerIndex =
+            static_cast<std::size_t>(std::floor(position));
 
-    const double fraction =
-        position - static_cast<double>(lowerIndex);
+        const auto upperIndex =
+            static_cast<std::size_t>(std::ceil(position));
 
-    const double quantile =
-        scenarioPnl[lowerIndex] +
-        fraction *
-            (scenarioPnl[upperIndex] -
-             scenarioPnl[lowerIndex]);
+        const double fraction =
+            position - static_cast<double>(lowerIndex);
+
+        quantile =
+            scenarioPnl[lowerIndex] +
+            fraction *
+                (scenarioPnl[upperIndex] -
+                 scenarioPnl[lowerIndex]);
+
+        break;
+    }
+
+    case HistoricalQuantileConvention::NearestRank: {
+        const double tailSize =
+            (1.0 - confidenceLevel) *
+            static_cast<double>(scenarioPnl.size());
+
+        const auto rank = static_cast<std::size_t>(
+            std::ceil(tailSize)
+        );
+
+        const std::size_t index =
+            std::max<std::size_t>(1, rank) - 1;
+
+        quantile = scenarioPnl[index];
+
+        break;
+    }
+
+    default:
+        throw std::invalid_argument(
+            "Unknown historical quantile convention"
+        );
+    }
 
     return std::max(0.0, -quantile);
 }
+
 
 double calculateExpectedShortfall(
     std::vector<double> scenarioPnl,
@@ -292,7 +332,9 @@ double calculateExpectedShortfall(
 PortfolioHistoricalRiskResult PortfolioHistoricalRisk::calculate(
     const Portfolio& portfolio,
     const std::vector<HistoricalPriceSeries>& histories,
-    double confidenceLevel
+    double confidenceLevel,
+    HistoricalQuantileConvention convention
+
 ) const {
     validateConfidenceLevel(confidenceLevel);
 
@@ -465,11 +507,11 @@ PortfolioHistoricalRiskResult PortfolioHistoricalRisk::calculate(
     // 7. Calculate currency VaR and Expected Shortfall.
     // ------------------------------------------------------------
 
-    const double var =
-        calculateHistoricalVaR(
-            scenarioPnl,
-            confidenceLevel
-        );
+    const double var = calculateHistoricalVaR(
+        scenarioPnl,
+        confidenceLevel,
+        convention
+    );
 
     const double expectedShortfall =
         calculateExpectedShortfall(

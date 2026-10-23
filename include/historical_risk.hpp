@@ -1,4 +1,7 @@
+
 #pragma once
+
+#include "historical_var.hpp"
 
 #include <vector>
 
@@ -12,16 +15,18 @@ struct HistoricalRiskResult {
 
 class HistoricalRisk {
 public:
-    // Accept prices and calculate returns internally.
     HistoricalRiskResult calculate(
         const std::vector<double>& prices,
-        double confidenceLevel
+        double confidenceLevel,
+        HistoricalQuantileConvention convention =
+            HistoricalQuantileConvention::LinearInterpolation
     ) const;
 
-    // Calculate historical risk directly from an existing return series.
     HistoricalRiskResult calculateFromReturns(
         const std::vector<double>& returns,
-        double confidenceLevel
+        double confidenceLevel,
+        HistoricalQuantileConvention convention =
+            HistoricalQuantileConvention::LinearInterpolation
     ) const;
 };
 

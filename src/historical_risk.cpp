@@ -1,11 +1,11 @@
 
 #include "historical_risk.hpp"
 
-#include "historical_var.hpp"
 #include "returns.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <stdexcept>
 #include <vector>
 
@@ -13,16 +13,22 @@ namespace ql {
 
 HistoricalRiskResult HistoricalRisk::calculate(
     const std::vector<double>& prices,
-    double confidenceLevel
+    double confidenceLevel,
+    HistoricalQuantileConvention convention
 ) const {
     const std::vector<double> returns = historicalReturns(prices);
 
-    return calculateFromReturns(returns, confidenceLevel);
+    return calculateFromReturns(
+        returns,
+        confidenceLevel,
+        convention
+    );
 }
 
 HistoricalRiskResult HistoricalRisk::calculateFromReturns(
     const std::vector<double>& returns,
-    double confidenceLevel
+    double confidenceLevel,
+    HistoricalQuantileConvention convention
 ) const {
     if (returns.empty()) {
         throw std::invalid_argument(
@@ -46,21 +52,32 @@ HistoricalRiskResult HistoricalRisk::calculateFromReturns(
         }
     }
 
-    // Calculate Historical VaR.
     HistoricalVaR varCalculator;
 
-    const double var =
-        varCalculator.calculate(returns, confidenceLevel);
+    const double var = varCalculator.calculate(
+        returns,
+        confidenceLevel,
+        convention
+    );
 
-    // Sort returns from worst to best.
     std::vector<double> sortedReturns = returns;
 
-    std::sort(sortedReturns.begin(), sortedReturns.end());
+    std::sort(
+        sortedReturns.begin(),
+        sortedReturns.end()
+    );
 
-    // Number of observations in the worst (1 - confidence) tail.
+    // Fractional-tail ES: average the worst (1 - alpha) * N
+    // observations, allowing a fractional boundary observation.
     const double tailSize =
         (1.0 - confidenceLevel) *
         static_cast<double>(sortedReturns.size());
+
+    if (!std::isfinite(tailSize) || tailSize <= 0.0) {
+        throw std::invalid_argument(
+            "Expected Shortfall tail must be positive."
+        );
+    }
 
     const auto fullTailCount =
         static_cast<std::size_t>(std::floor(tailSize));
@@ -71,7 +88,6 @@ HistoricalRiskResult HistoricalRisk::calculateFromReturns(
         tailLoss += -sortedReturns[i];
     }
 
-    // Include a fractional observation at the tail boundary.
     const double fractionalPart =
         tailSize - static_cast<double>(fullTailCount);
 
