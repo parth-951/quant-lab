@@ -71,6 +71,10 @@ int main() {
         require(
             near(fixed.predictedVaR[1], 12.5),
             "Second fixed-notional forecast mismatch");
+        require(
+            fixed.forecastPortfolioValues ==
+                std::vector<double>{100.0, 100.0},
+            "Fixed-notional forecast values should remain constant");
 
         require(
             near(fixed.realizedLosses[0], 20.0),
@@ -113,6 +117,13 @@ int main() {
         require(
             near(compounded.realizedLosses[1], 0.0),
             "Zero return should produce zero compounded loss");
+        require(
+            near(compounded.forecastPortfolioValues[0], 99.0),
+            "First compounded forecast value should be 99");
+
+        require(
+            near(compounded.forecastPortfolioValues[1], 79.2),
+            "Second compounded forecast value should be 79.2");
 
         // 3. No look-ahead: changing return[t] cannot change VaR[t].
         std::vector<double> altered = returns;
@@ -173,7 +184,28 @@ int main() {
                 compoundedChangedReturn.predictedVaR[1],
                 compoundedBaseline.predictedVaR[1]),
             "A realized return should affect later compounded forecasts");
+        // 3c. Actual-P&L forecasts must also obey no-look-ahead.
+        const auto pnlBaseline =
+            ql::RollingVaRBacktest::runWithRealizedPnl(
+                returns,
+                {10.0, -25.0, 5.0, -40.0},
+                2,
+                100.0,
+                0.75);
 
+        const auto pnlChangedReturn =
+            ql::RollingVaRBacktest::runWithRealizedPnl(
+                altered,
+                {10.0, -25.0, 5.0, -40.0},
+                2,
+                100.0,
+                0.75);
+
+        require(
+            near(
+                pnlBaseline.predictedVaR[0],
+                pnlChangedReturn.predictedVaR[0]),
+            "Actual-P&L VaR must not use the current day's return");
         // 4. Actual P&L uses conventional signs:
         // profits are positive, losses are negative.
         const auto pnlResult = ql::RollingVaRBacktest::runPnl(
@@ -195,7 +227,58 @@ int main() {
             pnlResult.forecastIndices ==
                 std::vector<std::size_t>{0, 1, 2},
             "P&L forecast indices mismatch");
+        // 4b. Rolling forecasts use actual P&L for realized losses.
+        const auto rollingPnl = ql::RollingVaRBacktest::runWithRealizedPnl(
+            returns,
+            {10.0, -25.0, 5.0, -40.0},
+            2,
+            100.0,
+            0.75);
 
+        require(
+            rollingPnl.realizedLosses == std::vector<double>{0.0, 40.0},
+            "Rolling actual P&L should produce losses for forecast days");
+
+        require(
+            rollingPnl.forecastIndices ==
+                std::vector<std::size_t>{2, 3},
+            "Rolling actual P&L forecast indices mismatch");
+
+        require(
+            rollingPnl.forecastPortfolioValues ==
+                std::vector<double>{100.0, 100.0},
+            "Fixed-notional actual P&L should use constant forecast values");
+
+        // Mismatched returns and P&L lengths must be rejected.
+        requireThrows([] {
+            (void)ql::RollingVaRBacktest::runWithRealizedPnl(
+                {-0.10, 0.10, -0.20, 0.00},
+                {-25.0, 5.0},
+                2,
+                100.0,
+                0.75);
+        }, "Mismatched returns and P&L lengths should throw");
+
+        // Non-finite actual P&L must be rejected.
+        requireThrows([] {
+            (void)ql::RollingVaRBacktest::runWithRealizedPnl(
+                {-0.10, 0.10, -0.20, 0.00},
+                {10.0, -25.0,
+                 std::numeric_limits<double>::quiet_NaN(), -40.0},
+                2,
+                100.0,
+                0.75);
+        }, "NaN realized P&L should throw");
+
+        requireThrows([] {
+            (void)ql::RollingVaRBacktest::runWithRealizedPnl(
+                {-0.10, 0.10, -0.20, 0.00},
+                {10.0, -25.0, 5.0,
+                 std::numeric_limits<double>::infinity()},
+                2,
+                100.0,
+                0.75);
+        }, "Infinite realized P&L should throw");
         // 5. Mismatched P&L and VaR lengths must be rejected.
         requireThrows([] {
             (void)ql::RollingVaRBacktest::runPnl(

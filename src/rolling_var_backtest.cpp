@@ -46,7 +46,7 @@ RollingVaRBacktestResult RollingVaRBacktest::run(
     double portfolioValue,
     double confidenceLevel,
     double significanceLevel,
-    PortfolioValueMode valueMode) {
+    PortfolioValueMode mode) {
 
     if (lookbackWindow == 0) {
         throw std::invalid_argument(
@@ -61,21 +61,21 @@ RollingVaRBacktestResult RollingVaRBacktest::run(
     validatePortfolioValue(portfolioValue);
     validateBacktestLevels(confidenceLevel, significanceLevel);
 
-    if (valueMode != PortfolioValueMode::FixedNotional &&
-        valueMode != PortfolioValueMode::Compounded) {
+    if (mode != PortfolioValueMode::FixedNotional &&
+        mode != PortfolioValueMode::Compounded) {
         throw std::invalid_argument("Invalid portfolio value mode.");
     }
 
     for (double r : returns) {
         const bool invalidReturn =
             !std::isfinite(r) ||
-            (valueMode == PortfolioValueMode::FixedNotional
+            (mode == PortfolioValueMode::FixedNotional
                 ? r <= -1.0
                 : r < -1.0);
 
         if (invalidReturn) {
             throw std::invalid_argument(
-                valueMode == PortfolioValueMode::FixedNotional
+                mode == PortfolioValueMode::FixedNotional
                     ? "Fixed-notional returns must be finite and greater than -100%."
                     : "Compounded returns must be finite and at least -100%.");
         }
@@ -89,13 +89,14 @@ RollingVaRBacktestResult RollingVaRBacktest::run(
     result.predictedVaR.reserve(forecastCount);
     result.realizedLosses.reserve(forecastCount);
     result.forecastIndices.reserve(forecastCount);
+    result.forecastPortfolioValues.reserve(forecastCount);
 
     HistoricalVaR historicalVaR;
 
     // Value at the start of the next forecast day.
     double currentPortfolioValue = portfolioValue;
 
-if (valueMode == PortfolioValueMode::Compounded) {
+if (mode == PortfolioValueMode::Compounded) {
     // Returns before the first forecast have already affected the
     // portfolio's starting value for that forecast.
     for (std::size_t i = 0; i < lookbackWindow; ++i) {
@@ -123,7 +124,7 @@ if (valueMode == PortfolioValueMode::Compounded) {
             historicalVaR.calculate(window, confidenceLevel);
 
         const double forecastPortfolioValue =
-            valueMode == PortfolioValueMode::FixedNotional
+            mode == PortfolioValueMode::FixedNotional
                 ? portfolioValue
                 : currentPortfolioValue;
 
@@ -143,10 +144,11 @@ if (valueMode == PortfolioValueMode::Compounded) {
         result.predictedVaR.push_back(predictedLossThreshold);
         result.realizedLosses.push_back(realizedLoss);
         result.forecastIndices.push_back(t);
+        result.forecastPortfolioValues.push_back(forecastPortfolioValue);
 
         // Compound only after processing the current day's forecast and P&L.
         // This means returns[t] cannot influence the forecast for day t.
-        if (valueMode == PortfolioValueMode::Compounded) {
+        if (mode == PortfolioValueMode::Compounded) {
             currentPortfolioValue =
                 forecastPortfolioValue * (1.0 + returns[t]);
 
@@ -165,6 +167,137 @@ if (valueMode == PortfolioValueMode::Compounded) {
 
     return result;
 }
+
+RollingVaRBacktestResult RollingVaRBacktest::runWithRealizedPnl(
+    const std::vector<double>& returns,
+    const std::vector<double>& realizedPnl,
+    std::size_t lookbackWindow,
+    double initialPortfolioValue,
+    double confidenceLevel,
+    double significanceLevel,
+    PortfolioValueMode mode) {
+
+    if (returns.size() != realizedPnl.size()) {
+        throw std::invalid_argument(
+            "Returns and realized P&L must have equal lengths.");
+    }
+
+    for (double pnl : realizedPnl) {
+        if (!std::isfinite(pnl)) {
+            throw std::invalid_argument(
+                "Realized P&L must contain only finite values.");
+        }
+    }
+
+    if (lookbackWindow == 0) {
+        throw std::invalid_argument(
+            "Lookback window must be at least one observation.");
+    }
+
+    if (returns.size() <= lookbackWindow) {
+        throw std::invalid_argument(
+            "Returns must contain more observations than the lookback window.");
+    }
+
+    validatePortfolioValue(initialPortfolioValue);
+    validateBacktestLevels(confidenceLevel, significanceLevel);
+
+    if (mode != PortfolioValueMode::FixedNotional &&
+        mode != PortfolioValueMode::Compounded) {
+        throw std::invalid_argument("Invalid portfolio value mode.");
+    }
+
+    for (double r : returns) {
+        const bool invalidReturn =
+            !std::isfinite(r) ||
+            (mode == PortfolioValueMode::FixedNotional
+                ? r <= -1.0
+                : r < -1.0);
+
+        if (invalidReturn) {
+            throw std::invalid_argument(
+                mode == PortfolioValueMode::FixedNotional
+                    ? "Fixed-notional returns must be finite and greater than -100%."
+                    : "Compounded returns must be finite and at least -100%.");
+        }
+    }
+
+    RollingVaRBacktestResult result;
+
+    const std::size_t forecastCount = returns.size() - lookbackWindow;
+
+    result.predictedVaR.reserve(forecastCount);
+    result.realizedLosses.reserve(forecastCount);
+    result.forecastIndices.reserve(forecastCount);
+    result.forecastPortfolioValues.reserve(forecastCount);
+
+    HistoricalVaR historicalVaR;
+    double currentPortfolioValue = initialPortfolioValue;
+
+    if (mode == PortfolioValueMode::Compounded) {
+        for (std::size_t i = 0; i < lookbackWindow; ++i) {
+            currentPortfolioValue *= (1.0 + returns[i]);
+
+            if (!std::isfinite(currentPortfolioValue)) {
+                throw std::overflow_error(
+                    "Compounded portfolio value is not finite.");
+            }
+        }
+    }
+
+    for (std::size_t t = lookbackWindow; t < returns.size(); ++t) {
+        // Use only observations strictly before forecast day t.
+        const std::vector<double> window(
+            returns.begin() +
+                static_cast<std::ptrdiff_t>(t - lookbackWindow),
+            returns.begin() + static_cast<std::ptrdiff_t>(t));
+
+        const double historicalVaRFraction =
+            historicalVaR.calculate(window, confidenceLevel);
+
+        const double forecastPortfolioValue =
+            mode == PortfolioValueMode::FixedNotional
+                ? initialPortfolioValue
+                : currentPortfolioValue;
+
+        const double predictedLossThreshold =
+            forecastPortfolioValue * historicalVaRFraction;
+
+        // Use actual P&L rather than deriving loss from returns.
+        const double realizedLoss = std::max(0.0, -realizedPnl[t]);
+
+        if (!std::isfinite(predictedLossThreshold) ||
+            !std::isfinite(realizedLoss)) {
+            throw std::overflow_error(
+                "Rolling VaR calculation produced a non-finite value.");
+        }
+
+        result.predictedVaR.push_back(predictedLossThreshold);
+        result.realizedLosses.push_back(realizedLoss);
+        result.forecastIndices.push_back(t);
+        result.forecastPortfolioValues.push_back(forecastPortfolioValue);
+
+        // Update portfolio value only after this day's forecast.
+        if (mode == PortfolioValueMode::Compounded) {
+            currentPortfolioValue =
+                forecastPortfolioValue * (1.0 + returns[t]);
+
+            if (!std::isfinite(currentPortfolioValue)) {
+                throw std::overflow_error(
+                    "Compounded portfolio value is not finite.");
+            }
+        }
+    }
+
+    result.backtest = VaRBacktesting::run(
+        result.predictedVaR,
+        result.realizedLosses,
+        confidenceLevel,
+        significanceLevel);
+
+    return result;
+}
+
 
 RollingVaRBacktestResult RollingVaRBacktest::runPnl(
     const std::vector<double>& predictedVaR,

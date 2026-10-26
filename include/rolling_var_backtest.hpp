@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include "var_backtesting.hpp"
@@ -16,6 +17,7 @@ struct RollingVaRBacktestResult {
     std::vector<double> predictedVaR;
     std::vector<double> realizedLosses;
     std::vector<std::size_t> forecastIndices;
+    std::vector<double> forecastPortfolioValues;
     VaRBacktestResult backtest;
 };
 
@@ -27,7 +29,16 @@ public:
         double portfolioValue,
         double confidenceLevel,
         double significanceLevel = 0.05,
-        PortfolioValueMode valueMode = PortfolioValueMode::FixedNotional);
+        PortfolioValueMode mode = PortfolioValueMode::FixedNotional);
+
+    [[nodiscard]] static RollingVaRBacktestResult runWithRealizedPnl(
+        const std::vector<double>& returns,
+        const std::vector<double>& realizedPnl,
+        std::size_t lookbackWindow,
+        double initialPortfolioValue,
+        double confidenceLevel,
+        double significanceLevel = 0.05,
+        PortfolioValueMode mode = PortfolioValueMode::FixedNotional);
 
     [[nodiscard]] static RollingVaRBacktestResult runPnl(
         const std::vector<double>& predictedVaR,
